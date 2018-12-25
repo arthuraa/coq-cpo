@@ -60,11 +60,10 @@ Canonical sig_subType (T : Type) (P : T -> Prop) :=
 
 Module Choice.
 
-Definition axiom (T : Type) :=
-  forall (P : T -> Prop), (exists! x, P x) -> {x : T | P x}.
+Variant mixin_of (T : Type) :=
+  Mixin of forall (P : T -> Prop), (exists! x, P x) -> {x : T | P x}.
 
-Notation mixin_of := axiom.
-Notation class_of := axiom.
+Notation class_of := mixin_of (only parsing).
 
 Section ClassDef.
 
@@ -94,10 +93,10 @@ Export Choice.Exports.
 
 Section ChoiceTheory.
 
-Variable T : choiceType.
+Variables (T : choiceType) (P : T -> Prop).
 
-Lemma choiceP : Choice.axiom T.
-Proof. by case: (T). Qed.
+Lemma choiceP : (exists! x, P x) -> {x : T | P x}.
+Proof. by case: (T) P=> [? []]. Qed.
 
 End ChoiceTheory.
 
@@ -105,9 +104,9 @@ Section SubChoice.
 
 Variables (T : choiceType) (P : T -> Prop) (sT : subType P).
 
-Lemma subType_choiceMixin : Choice.axiom sT.
+Lemma subType_choiceMixin : Choice.mixin_of sT.
 Proof.
-move=> Q H.
+split=> Q H.
 pose PQ x := P x /\ exists Px : P x, Q (Sub _ Px).
 have {H} /choiceP [x [Px Qx]] : exists! x, PQ x.
   case: H=> x; elim/SubP: x=> [x Px] [Qx unique_x].
@@ -120,7 +119,7 @@ Qed.
 End SubChoice.
 
 Notation "[ 'choiceMixin' 'of' T 'by' <: ]" :=
-  (@subType_choiceMixin _ _ _ : Choice.axiom T)
+  (@subType_choiceMixin _ _ _ : Choice.mixin_of T)
   (at level 0, format "[ 'choiceMixin'  'of'  T  'by'  <: ]") : form_scope.
 
 Section SigChoice.
@@ -139,9 +138,9 @@ Variables (T : Type) (S : choiceType) (f : T -> S) (g : S -> T).
    choice for every type from singleton_of_inj below.  *)
 Hypothesis fK : cancel f g.
 
-Lemma CanChoiceMixin : Choice.axiom T.
+Lemma CanChoiceMixin : Choice.mixin_of T.
 Proof.
-move=> P ex.
+split=> P ex.
 pose Q y := exists2 x, P x & y = f x.
 have {ex} /choiceP [y Qy]: exists! y, Q y.
   case: ex=> [x [Px x_unique]].
@@ -156,9 +155,9 @@ Section DepFunChoice.
 
 Variables (I : Type) (T_ : I -> choiceType).
 
-Lemma depfun_choiceMixin : Choice.axiom (forall i, T_ i).
+Lemma depfun_choiceMixin : Choice.mixin_of (forall i, T_ i).
 Proof.
-move=> P ex.
+split=> P ex.
 pose R i x := forall f, P f -> f i = x.
 have ex1 : forall i, exists! x, R i x.
   move=> i.
@@ -202,9 +201,9 @@ Definition subsing_of (x : T) :=
 Lemma subsing_of_inj : injective subsing_of.
 Proof. by move=> x y [->]. Qed.
 
-Lemma subsing_choiceMixin : Choice.axiom subsing.
+Lemma subsing_choiceMixin : Choice.mixin_of subsing.
 Proof.
-move=> P ex.
+split=> P ex.
 pose A x := P (subsing_of x).
 have unique_A : forall x y, A x -> A y -> x = y.
   case ex=> [B [PB unique_B]] x y Ax Ay.
@@ -423,6 +422,49 @@ Qed.
 Definition nat_poMixin := PoMixin nat_apprP.
 Canonical nat_poType := Eval hnf in PoType nat nat_poMixin.
 
+Module PoChoice.
+
+Section ClassDef.
+
+Record class_of T := Class {
+  base_po : Po.class_of T;
+  base_choice : Choice.class_of T
+}.
+
+Record type := Pack {sort; _ : class_of sort}.
+Local Coercion sort : type >-> Sortclass.
+Local Coercion base_po : class_of >-> Po.class_of.
+Local Coercion base_choice : class_of >-> Choice.class_of.
+Variables (T : Type) (cT : type).
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
+Notation xclass := (class : class_of xT).
+
+Definition choiceType := @Choice.Pack cT xclass.
+Definition poType := @Po.Pack cT xclass.
+
+End ClassDef.
+
+Module Exports.
+Coercion base_po : class_of >-> Po.class_of.
+Coercion base_choice : class_of >-> Choice.class_of.
+Coercion sort : type >-> Sortclass.
+Coercion poType : type >-> Po.type.
+Canonical poType.
+Coercion choiceType : type >-> Choice.type.
+Canonical choiceType.
+Notation poChoiceType := type.
+Notation "[ 'poChoiceType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
+  (at level 0, format "[ 'poChoiceType'  'of'  T  'for'  cT ]") : form_scope.
+Notation "[ 'poChoiceType' 'of' T ]" := (@clone T _ _ id)
+  (at level 0, format "[ 'poChoiceType'  'of'  T ]") : form_scope.
+End Exports.
+
+End PoChoice.
+
+Export PoChoice.Exports.
+
 Section Supremum.
 
 Variable T : poType.
@@ -473,22 +515,13 @@ End Supremum.
 
 Module Cpo.
 
-Definition axiom (T : poType) :=
-  forall (x : mono _ T),
-  exists sup_x, sup (val x) sup_x.
-
-Notation mixin_of := axiom.
+Variant mixin_of (T : poType) :=
+  Mixin of forall (x : mono _ T), exists sup_x, sup (val x) sup_x.
 
 Section ClassDef.
 
-Record class_of T := Class {
-  base_choice : Choice.class_of T;
-  base_po     : Po.class_of T;
-  mixin       : axiom (Po.Pack base_po)
-}.
-
-Local Coercion base_choice : class_of >-> Choice.class_of.
-Local Coercion base_po     : class_of >-> Po.class_of.
+Record class_of T := Class {base: PoChoice.class_of T; _ : mixin_of (Po.Pack base)}.
+Local Coercion base : class_of >-> PoChoice.class_of.
 
 Record type := Pack {sort; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
@@ -499,16 +532,20 @@ Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack (bT_po : Po.class_of T) (m : mixin_of (Po.Pack bT_po)) :=
-  fun b bT_choice & phant_id (@Choice.class bT_choice) b => @Pack T (@Class T b bT_po m).
+  fun b bT_choice & phant_id (Choice.class b) bT_choice =>
+  @Pack T (@Class T (PoChoice.Class bT_po bT_choice) m).
 
+Definition poChoiceType := @PoChoice.Pack cT xclass.
 Definition choiceType := @Choice.Pack cT xclass.
 Definition poType := @Po.Pack cT xclass.
 
 End ClassDef.
 
 Module Exports.
-Coercion base_choice : class_of >-> Choice.class_of.
+Coercion base : class_of >-> PoChoice.class_of.
 Coercion sort : type >-> Sortclass.
+Coercion poChoiceType : type >-> PoChoice.type.
+Canonical poChoiceType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
 Coercion poType : type >-> Po.type.
@@ -532,8 +569,8 @@ Section Basics.
 
 Variable T : cpoType.
 
-Lemma appr_sup : Cpo.axiom T.
-Proof. exact: Cpo.mixin. Qed.
+Lemma appr_sup : forall (x : mono _ T), exists sup_x, sup (val x) sup_x.
+Proof. by case: T=> [? [? []]]. Qed.
 
 Lemma supP (x : chain T) : {sup_x | sup (val x) sup_x}.
 Proof.
@@ -561,7 +598,7 @@ Record cont := Cont {
 Canonical cont_subType := [subType for cont_val].
 (* FIXME: This does not work if the form notation is used. *)
 Definition mono_choiceMixin :=
-  @subType_choiceMixin (fun_choiceType T S) _ _ : Choice.axiom (mono T S).
+  @subType_choiceMixin (fun_choiceType T S) _ _ : Choice.mixin_of (mono T S).
 Canonical mono_choiceType :=
   Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
 Definition cont_poMixin :=
@@ -579,9 +616,9 @@ move=> e; do 2![apply: val_inj].
 exact: functional_extensionality e.
 Qed.
 
-Lemma cont_apprP : Cpo.axiom [poType of cont].
+Lemma cont_apprP : Cpo.mixin_of [poType of cont].
 Proof.
-move=> /= f.
+split=> /= f.
 have f_mono1: forall x, monotone (f^~ x).
   by move=> x n1 n2 n1n2; apply: (valP f n1 n2 n1n2).
 pose sup_f x := val (supP (Mono (f_mono1 x))).
@@ -608,7 +645,7 @@ have sup_f_cont : continuous sup_f.
     rewrite /sup_f; congr (val (supP _)); apply/val_inj=> /=.
     apply: functional_extensionality=> n.
     apply: sup_unique (valP (f n) x) (gP n).
-  rewrite (supC _ gP); first exact: valP.
+  rewrite (@supC _ _ (sup_f \o x) g _ gP); first exact: valP.
   move=> n /=; exact: sup_fP.
 exists (@Cont (Mono sup_f_mono) sup_f_cont); split.
 - by move=> n x /=; case: (sup_fP x)=> [ub_f _]; apply: ub_f.
