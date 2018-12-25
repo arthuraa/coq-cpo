@@ -201,12 +201,19 @@ Definition subsing_of (x : T) :=
 Lemma subsing_of_inj : injective subsing_of.
 Proof. by move=> x y [->]. Qed.
 
+Lemma in_subsing (X : subsing) (x : T) : X x -> X = subsing_of x.
+Proof.
+move=> Xx; apply: val_inj; apply: functional_extensionality=> y /=.
+apply: propositional_extensionality; split; last by move=> <-.
+exact: (valP X) Xx.
+Qed.
+
 Lemma subsing_choiceMixin : Choice.mixin_of subsing.
 Proof.
 split=> P ex.
 pose A x := P (subsing_of x).
 have unique_A : forall x y, A x -> A y -> x = y.
-  case ex=> [B [PB unique_B]] x y Ax Ay.
+  case: ex=> [B [PB unique_B]] x y Ax Ay.
   apply: subsing_of_inj.
   by rewrite -(unique_B _ Ax) -(unique_B _ Ay).
 pose X : subsing := Subsing unique_A.
@@ -465,6 +472,44 @@ End PoChoice.
 
 Export PoChoice.Exports.
 
+Section SubsingPo.
+
+Variable (T : poType).
+Implicit Types (X Y Z : subsing T) (x y z : T).
+
+Definition subsing_appr X Y : Prop :=
+  forall x, X x -> exists2 y, Y y & x ⊑ y.
+
+Lemma subsing_apprP : Po.axioms subsing_appr.
+Proof.
+split.
+- move=> X x Xx; exists x=> //; reflexivity.
+- move=> X Y Z XY YZ x /XY [] y /YZ [] z Zz yz xy.
+  by exists z; last apply: transitivity xy yz.
+- move=> X Y XY YX; apply: val_inj.
+  apply: functional_extensionality=> x.
+  apply: propositional_extensionality; split=> /=.
+  + move=> Xx; case/XY: (Xx)=> [y Yy xy].
+    case/YX: (Yy)=> x' Xx' yx'.
+    rewrite (valP X _ _ Xx' Xx) in yx'.
+    by rewrite (appr_anti xy yx').
+  + move=> Yx; case/YX: (Yx)=> [y Xy xy].
+    case/XY: (Xy)=> x' Yx' yx'.
+    rewrite (valP Y _ _ Yx' Yx) in yx'.
+    by rewrite (appr_anti xy yx').
+Qed.
+
+Definition subsing_poMixin := PoMixin subsing_apprP.
+Canonical subsing_poType := Eval hnf in PoType (subsing T) subsing_poMixin.
+
+Lemma subsing_of_appr x y : subsing_of x ⊑ subsing_of y <-> x ⊑ y.
+Proof.
+split; first by move=> /(_ x erefl) [y' ->].
+by move=> xy x' <-; exists y.
+Qed.
+
+End SubsingPo.
+
 Section Supremum.
 
 Variable T : poType.
@@ -482,6 +527,19 @@ move=> [ub_x1 least_x1] [ub_x2 least_x2].
 apply: appr_anti.
 - exact: least_x1 ub_x2.
 - exact: least_x2 ub_x1.
+Qed.
+
+Definition shift (x : nat -> T) n m := x (n + m).
+
+Lemma sup_shift (x : nat -> T) n sup_x :
+  monotone x ->
+  sup x sup_x ->
+  sup (shift x n) sup_x.
+Proof.
+move=> x_mono [ub_x least_x]; split; first by move=> m; apply: ub_x.
+move=> y ub_y; apply: least_x=> p.
+apply: transitivity (x (n + p)) _ _ (ub_y _).
+by apply: x_mono; apply: leq_addl.
 Qed.
 
 Definition osup (x : nat -> T) : subsing T := Sub (sup x) (@sup_unique x).
@@ -616,7 +674,7 @@ move=> e; do 2![apply: val_inj].
 exact: functional_extensionality e.
 Qed.
 
-Lemma cont_apprP : Cpo.mixin_of [poType of cont].
+Lemma cont_cpoMixin : Cpo.mixin_of [poType of cont].
 Proof.
 split=> /= f.
 have f_mono1: forall x, monotone (f^~ x).
@@ -653,4 +711,58 @@ exists (@Cont (Mono sup_f_mono) sup_f_cont); split.
   move=> n; exact: ub_g.
 Qed.
 
+Canonical cont_cpoType := Eval hnf in CpoType cont cont_cpoMixin.
+
 End Continuous.
+
+Section SubsingCpo.
+
+Variables (T : cpoType).
+
+Lemma subsing_cpoMixin : Cpo.mixin_of (subsing_poType T).
+Proof.
+split=> X.
+pose sup_X x :=
+  exists (y : chain T) (n : nat),
+  (forall m, X (n + m) = subsing_of (y m)) /\
+  sup y x.
+have sup_XP : forall x1 x2, sup_X x1 -> sup_X x2 -> x1 = x2.
+  move=> x1 x2 [y1 [n1 [y1X x1P]]] [y2 [n2 [y2X x2P]]].
+  pose y := shift y1 (n2 - n1).
+  have {x1P} x1P : sup y x1 by exact: sup_shift (valP y1) _.
+  suffices: sup y x2 by apply: sup_unique x1P.
+  have -> : y = shift y2 (n1 - n2).
+    apply: functional_extensionality=> n.
+    rewrite /y /shift.
+    apply: subsing_of_inj.
+    by rewrite -y1X -y2X !addnA -!maxnE maxnC.
+  by apply: sup_shift (valP y2) _.
+exists (Sub sup_X sup_XP); split.
+- move=> n x /= Xnx.
+  have H : forall m, exists x', X (n + m) x'.
+    by move=> m; case: (valP X _ _ (leq_addr m n) _ Xnx)=> x'; eauto.
+  pose y x' := val (choose (H x')).
+  have y_mono : monotone y.
+    move=> n1 n2 n1n2.
+    have X_n1 : X (n + n1) (y n1) := valP _.
+    have X_n2 : X (n + n2) (y n2) := valP _.
+    have {n1n2} n1n2: (n + n1) <= (n + n2) by rewrite leq_add2l.
+    have [x' X_n2' ?] := valP X _ _ n1n2 _ X_n1.
+    by rewrite (valP (X (n + n2)) _ _ X_n2 X_n2').
+  exists (val (supP (Mono y_mono))).
+    exists (Mono y_mono), n; split; last exact: valP.
+    by move=> m; apply/in_subsing/(valP (choose (H m))).
+  suffices -> : x = y 0.
+    by case: (supP _)=> [sup_y [/= ub_y _]]; apply: ub_y.
+  rewrite /y; case: (choose _)=> z; rewrite /= addn0=> zP.
+  by rewrite (valP (X n) _ _ Xnx zP).
+- move=> /= ub_X ub_XP x [y [n [eq_y sup_x]]].
+  move/(_ (n + 0)): (ub_XP); rewrite eq_y.
+  case/(_ _ erefl)=> z zP _; exists z=> //.
+  case: sup_x=> _; apply=> m; apply/subsing_of_appr.
+  rewrite -eq_y -(in_subsing zP); exact: ub_XP.
+Qed.
+
+Canonical subsing_cpoType := Eval hnf in CpoType (subsing T) subsing_cpoMixin.
+
+End SubsingCpo.
