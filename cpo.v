@@ -10,6 +10,10 @@ Unset Printing Implicit Defensive.
 
 Obligation Tactic := idtac.
 
+Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
+  f \o (g \o h) = f \o g \o h.
+Proof. by []. Qed.
+
 Section SubType.
 
 Variables (T : Type) (P : T -> Prop).
@@ -390,6 +394,10 @@ Canonical mono_subType (T S : poType) :=
 Definition mono_comp T S R (f : mono S R) (g : mono T S) : mono T R :=
   Sub (f \o g) (monotone_comp (valP f) (valP g)).
 
+Lemma mono_compA A B C D (f : mono C D) (g : mono B C) (h : mono A B) :
+  mono_comp f (mono_comp g h) = mono_comp (mono_comp f g) h.
+Proof. exact/val_inj. Qed.
+
 Section DepFunPo.
 
 Variables (I : Type) (T_ : I -> poType).
@@ -648,6 +656,16 @@ Definition continuous (f : T -> S) :=
   forall (x : chain T),
   sup (f \o x) (f (val (supP x))).
 
+Lemma continuous_mono (f : mono T S) :
+  continuous f <->
+  forall x : chain T,
+    val (supP (mono_comp f x)) = f (val (supP x)).
+Proof.
+split.
+- move=> f_cont x; apply: sup_unique (f_cont x); exact: valP.
+- move=> f_cont x; rewrite -f_cont; exact: valP.
+Qed.
+
 Record cont := Cont {
   cont_val :> mono T S;
   _        :  continuous cont_val
@@ -714,6 +732,27 @@ Qed.
 Canonical cont_cpoType := Eval hnf in CpoType cont cont_cpoMixin.
 
 End Continuous.
+
+Section ContinuousComp.
+
+Variables (T S R : cpoType).
+
+Lemma continuous_comp (f : mono S R) (g : mono T S) :
+  continuous f -> continuous g -> continuous (f \o g).
+Proof.
+move=> /continuous_mono f_cont /continuous_mono g_cont.
+apply/(continuous_mono (mono_comp f g))=> x.
+by rewrite -mono_compA f_cont g_cont.
+Qed.
+
+Definition cont_comp (f : cont S R) (g : cont T S) : cont T R :=
+  Sub (mono_comp f g) (continuous_comp (valP f) (valP g)).
+
+End ContinuousComp.
+
+Lemma cont_compA A B C D (f : cont C D) (g : cont B C) (h : cont A B) :
+  cont_comp f (cont_comp g h) = cont_comp (cont_comp f g) h.
+Proof. exact/val_inj/mono_compA. Qed.
 
 Section SubsingCpo.
 
