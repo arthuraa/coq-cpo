@@ -120,6 +120,8 @@ exists (Sub x Px).
 by case: Qx=> [Px' Qx]; rewrite (proof_irrelevance _ Px Px').
 Qed.
 
+Canonical subType_choiceType := ChoiceType sT subType_choiceMixin.
+
 End SubChoice.
 
 Notation "[ 'choiceMixin' 'of' T 'by' <: ]" :=
@@ -405,6 +407,8 @@ Definition SubPoMixin := PoMixin sub_apprP.
 
 End SubPoType.
 
+Coercion subPoType_poType : subPoType >-> poType.
+
 Notation "[ 'poMixin' 'of' T 'by' <: ]" :=
   (SubPoMixin _ : Po.mixin_of T)
   (at level 0, format "[ 'poMixin'  'of'  T  'by'  <: ]") : form_scope.
@@ -555,6 +559,10 @@ split; first by move=> /(_ x erefl) [y' ->].
 by move=> xy x' <-; exists y.
 Qed.
 
+Definition sing_poMixin := [poMixin of sing T by <:].
+Canonical sing_poType := Eval hnf in PoType (sing T) sing_poMixin.
+Canonical sing_subPoType := Eval hnf in [subPoType of sing T].
+
 End SubsingPo.
 
 Section Supremum.
@@ -686,6 +694,35 @@ exact: sup_unique.
 Qed.
 
 End Basics.
+
+Section SubCpo.
+
+Variables (T : cpoType) (P : T -> Prop).
+
+Record subCpoType := SubCpoType {
+  subCpo_sort :> subPoType P;
+  _           :  forall (x : chain subCpo_sort) sup_x,
+                 sup (val \o x) sup_x -> P sup_x
+}.
+
+Variable sT : subCpoType.
+
+Lemma SubCpoMixin : Cpo.mixin_of sT.
+Proof.
+case: sT=> sT' clos /=; split=> x.
+have val_x_mono : monotone (val \o x).
+  by move=> y1 y2 /=; rewrite -appr_val; apply: (valP x).
+have [/= sup_x sup_xP] := supP (Mono val_x_mono).
+have [ub_x least_x] := sup_xP.
+exists (Sub sup_x (clos _ _ sup_xP)); split.
+- by move=> n; rewrite appr_val SubK; apply: ub_x.
+- move=> y ub_y; rewrite appr_val SubK; apply: least_x.
+  move=> n /=; rewrite -appr_val; exact: ub_y.
+Qed.
+
+Definition subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
+
+End SubCpo.
 
 Section Continuous.
 
