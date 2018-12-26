@@ -543,6 +543,17 @@ End PoChoice.
 
 Export PoChoice.Exports.
 
+Section MonotoneChoice.
+
+Variables (T : poType) (S : poChoiceType).
+
+Definition mono_choiceMixin :=
+  [choiceMixin of mono T S by <:].
+Canonical mono_choiceType :=
+  Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
+
+End MonotoneChoice.
+
 Section SubsingPo.
 
 Variable (T : poType).
@@ -833,10 +844,6 @@ Record cont := Cont {
 }.
 
 Canonical cont_subType := [subType for cont_val].
-Definition mono_choiceMixin :=
-  [choiceMixin of mono T S by <:].
-Canonical mono_choiceType :=
-  Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
 Definition cont_poMixin :=
   [poMixin of cont by <:].
 Canonical cont_poType :=
