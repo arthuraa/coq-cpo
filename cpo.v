@@ -8,6 +8,13 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+(* TODO:
+
+- Test whether wrapping functions in a definition helps with canonical structure
+  inference.
+
+*)
+
 Obligation Tactic := idtac.
 
 Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
@@ -371,6 +378,28 @@ Notation "x ⊑ y" := (appr x y) : cpo_scope.
 Notation "x ⋢ y" := (~ appr x y) : cpo_scope.
 Notation "x ⊑ y ⊑ z" := (x ⊑ y /\ y ⊑ z) : cpo_scope.
 
+Definition monotone (T S : poType) (f : T -> S) :=
+  forall x y, x ⊑ y -> f x ⊑ f y.
+
+Lemma monotone_comp (T S R : poType) (f : S -> R) (g : T -> S) :
+  monotone f -> monotone g -> monotone (f \o g).
+Proof. by move=> mono_f mono_g x y /mono_g/mono_f. Qed.
+
+Record mono (T S : poType) := Mono {
+  mono_val :> T -> S;
+  _        :  monotone mono_val
+}.
+
+Canonical mono_subType (T S : poType) :=
+  [subType for @mono_val T S].
+
+Definition mono_comp T S R (f : mono S R) (g : mono T S) : mono T R :=
+  Sub (f \o g) (monotone_comp (valP f) (valP g)).
+
+Lemma mono_compA A B C D (f : mono C D) (g : mono B C) (h : mono A B) :
+  mono_comp f (mono_comp g h) = mono_comp (mono_comp f g) h.
+Proof. exact/val_inj. Qed.
+
 Section SubPoType.
 
 Variables (T : poType) (P : T -> Prop).
@@ -393,6 +422,9 @@ Definition pack_subPoType U :=
 Lemma appr_val (sT : subPoType) (x y : sT) : x ⊑ y = val x ⊑ val y.
 Proof. by rewrite /appr; case: sT x y=> ? ? /= ->. Qed.
 
+Lemma monotone_val (sT : subPoType) : monotone (@val _ _ sT).
+Proof. by move=> x y; rewrite appr_val. Qed.
+
 Variable sT : subType P.
 
 Lemma sub_apprP : Po.axioms (fun x y : sT => val x ⊑ val y).
@@ -407,6 +439,8 @@ Definition SubPoMixin := PoMixin sub_apprP.
 
 End SubPoType.
 
+Arguments monotone_val {_ _ _}.
+
 Coercion subPoType_poType : subPoType >-> poType.
 
 Notation "[ 'poMixin' 'of' T 'by' <: ]" :=
@@ -416,28 +450,6 @@ Notation "[ 'poMixin' 'of' T 'by' <: ]" :=
 Notation "[ 'subPoType' 'of' T ]" :=
   (@pack_subPoType _ _ T _ _ id _ id erefl)
   (at level 0, format "[ 'subPoType'  'of'  T ]") : form_scope.
-
-Definition monotone (T S : poType) (f : T -> S) :=
-  forall x y, x ⊑ y -> f x ⊑ f y.
-
-Lemma monotone_comp (T S R : poType) (f : S -> R) (g : T -> S) :
-  monotone f -> monotone g -> monotone (f \o g).
-Proof. by move=> mono_f mono_g x y /mono_g/mono_f. Qed.
-
-Record mono (T S : poType) := Mono {
-  mono_val :> T -> S;
-  _        :  monotone mono_val
-}.
-
-Canonical mono_subType (T S : poType) :=
-  [subType for @mono_val T S].
-
-Definition mono_comp T S R (f : mono S R) (g : mono T S) : mono T R :=
-  Sub (f \o g) (monotone_comp (valP f) (valP g)).
-
-Lemma mono_compA A B C D (f : mono C D) (g : mono B C) (h : mono A B) :
-  mono_comp f (mono_comp g h) = mono_comp (mono_comp f g) h.
-Proof. exact/val_inj. Qed.
 
 Section DepFunPo.
 
@@ -626,6 +638,15 @@ Qed.
 
 End Supremum.
 
+Lemma depfun_supP T (S : T -> poType) (f : nat -> depfun_poType S) sup_f :
+  (forall x, sup (f^~ x) (sup_f x)) -> sup f sup_f.
+Proof.
+move=> sup_fP; split.
+- by move=> n x; case: (sup_fP x)=> ub_x _; apply: ub_x.
+- move=> g ub_g x; case: (sup_fP x)=> _; apply.
+  by move=> n; apply: ub_g.
+Qed.
+
 Module Cpo.
 
 Variant mixin_of (T : poType) :=
@@ -723,6 +744,62 @@ Qed.
 Definition subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
 
 End SubCpo.
+
+Section DepFunCpo.
+
+Variables (T : Type) (S : T -> cpoType).
+
+Lemma depfun_supPV (f : chain (depfun_poType S)) :
+  {sup_f | forall x, sup (f^~ x) (sup_f x)}.
+Proof.
+have f_mono: forall x, monotone (f^~ x).
+  by move=> x n1 n2 n1n2; apply: (valP f n1 n2 n1n2).
+by exists (fun x => val (supP (Mono (f_mono x))))=> x; apply: valP.
+Qed.
+
+Lemma depfun_cpoMixin : Cpo.mixin_of (depfun_poType S).
+Proof.
+split=> /= f; have [sup_f sup_fP] := depfun_supPV f.
+exists sup_f; exact: depfun_supP sup_fP.
+Qed.
+
+Canonical depfun_cpoType :=
+  Cpo.Pack (@Cpo.Class _
+              (PoChoice.Class (depfun_poMixin S) (depfun_choiceMixin S))
+              depfun_cpoMixin).
+
+Lemma depfun_sup_pointwise (f : chain depfun_cpoType) sup_f :
+  sup f sup_f ->
+  forall x, sup (f^~ x) (sup_f x).
+Proof.
+move=> sup_fP.
+have [sup_f' PW] := depfun_supPV f.
+have sup_f'P := depfun_supP PW.
+by rewrite (sup_unique sup_fP sup_f'P).
+Qed.
+
+End DepFunCpo.
+
+Definition fun_cpoType (T : Type) (S : cpoType) :=
+  Eval hnf in @depfun_cpoType T (fun _ => S).
+
+Section MonoCpo.
+
+Variables (T : poType) (S : cpoType).
+
+Lemma mono_sup_clos (f : chain (mono_poType T S)) (sup_f : fun_cpoType T S) :
+  sup (val \o f) sup_f -> monotone sup_f.
+Proof.
+set F := val \o f.
+have F_mono : monotone F by apply: monotone_comp monotone_val (valP f).
+move=> sup_fP x y xy.
+have PW := @depfun_sup_pointwise T (fun _ => S) (Mono F_mono) _ sup_fP.
+case: (PW x)=> _; apply=> n /=.
+case: (PW y)=> /(_ n) /= ub_y _.
+by apply: transitivity ub_y; apply: (valP (f n)) xy.
+Qed.
+
+End MonoCpo.
 
 Section Continuous.
 
