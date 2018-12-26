@@ -283,6 +283,19 @@ Qed.
 Definition mapss f x : subsing S :=
   Sub (mapss_def f x) (@mapss_proof f x).
 
+Definition liftss_def (f : T -> subsing S) (x : subsing T) (y : S) :=
+  exists2 x0, x x0 & f x0 y.
+
+Lemma liftss_proof f x y1 y2 :
+  liftss_def f x y1 -> liftss_def f x y2 -> y1 = y2.
+Proof.
+case=> [x1 x1P1 x1P2] [x2 /(valP x _ _ x1P1) <-].
+exact: (valP (f x1)).
+Qed.
+
+Definition liftss f x : subsing S :=
+  Sub (liftss_def f x) (@liftss_proof f x).
+
 End SingletonMap.
 
 Module Po.
@@ -358,7 +371,27 @@ Notation "x ⊑ y ⊑ z" := (x ⊑ y /\ y ⊑ z) : cpo_scope.
 
 Section SubPoType.
 
-Variables (T : poType) (P : T -> Prop) (sT : subType P).
+Variables (T : poType) (P : T -> Prop).
+
+Structure subPoType := SubPoType {
+  subPo_sort  :> subType P;
+  subPo_mixin :  Po.mixin_of subPo_sort;
+  _           :  Po.appr subPo_mixin = fun x y => val x ⊑ val y
+}.
+
+Definition subPoType_poType (sT : subPoType) :=
+  PoType sT (subPo_mixin sT).
+
+Canonical subPoType_poType.
+
+Definition pack_subPoType U :=
+  fun sT cT & sub_sort sT * Po.sort cT -> U * U =>
+  fun m     & phant_id m (Po.class cT) => @SubPoType sT m.
+
+Lemma appr_val (sT : subPoType) (x y : sT) : x ⊑ y = val x ⊑ val y.
+Proof. by rewrite /appr; case: sT x y=> ? ? /= ->. Qed.
+
+Variable sT : subType P.
 
 Lemma sub_apprP : Po.axioms (fun x y : sT => val x ⊑ val y).
 Proof.
@@ -375,6 +408,10 @@ End SubPoType.
 Notation "[ 'poMixin' 'of' T 'by' <: ]" :=
   (SubPoMixin _ : Po.mixin_of T)
   (at level 0, format "[ 'poMixin'  'of'  T  'by'  <: ]") : form_scope.
+
+Notation "[ 'subPoType' 'of' T ]" :=
+  (@pack_subPoType _ _ T _ _ id _ id erefl)
+  (at level 0, format "[ 'subPoType'  'of'  T ]") : form_scope.
 
 Definition monotone (T S : poType) (f : T -> S) :=
   forall x y, x ⊑ y -> f x ⊑ f y.
@@ -425,6 +462,8 @@ Definition mono_poMixin (T S : poType) :=
   [poMixin of mono T S by <:].
 Canonical mono_poType (T S : poType) :=
   Eval hnf in PoType (mono T S) (mono_poMixin T S).
+Canonical mono_subPoType (T S : poType) :=
+  Eval hnf in [subPoType of mono T S].
 
 Lemma nat_apprP : Po.axioms leq.
 Proof.
