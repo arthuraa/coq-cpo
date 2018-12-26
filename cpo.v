@@ -172,11 +172,11 @@ Qed.
 
 End CanChoice.
 
-Section DepFunChoice.
+Section DFunChoice.
 
 Variables (I : Type) (T_ : I -> choiceType).
 
-Lemma depfun_choiceMixin : Choice.mixin_of (forall i, T_ i).
+Lemma dfun_choiceMixin : Choice.mixin_of (forall i, T_ i).
 Proof.
 split=> P ex.
 pose R i x := forall f, P f -> f i = x.
@@ -194,12 +194,12 @@ apply: functional_extensionality_dep=> i.
 by move: (svalP (choiceP (ex1 i)) _ Pg)=> ->.
 Qed.
 
-Canonical depfun_choiceType := Eval hnf in ChoiceType (forall i, T_ i) depfun_choiceMixin.
+Canonical dfun_choiceType := Eval hnf in ChoiceType (forall i, T_ i) dfun_choiceMixin.
 
-End DepFunChoice.
+End DFunChoice.
 
 Canonical fun_choiceType T (S : choiceType) :=
-  Eval hnf in @depfun_choiceType T (fun _ => S).
+  Eval hnf in @dfun_choiceType T (fun _ => S).
 
 Section Singletons.
 
@@ -459,7 +459,7 @@ Notation "[ 'subPoType' 'of' T ]" :=
   (@pack_subPoType _ _ T _ _ id _ id erefl)
   (at level 0, format "[ 'subPoType'  'of'  T ]") : form_scope.
 
-Section DepFunPo.
+Section DFunPo.
 
 Variables (I : Type) (T_ : I -> poType).
 
@@ -474,13 +474,13 @@ split.
   apply: appr_anti; [exact: fg|exact: gf].
 Qed.
 
-Definition depfun_poMixin := PoMixin fun_apprP.
-Canonical depfun_poType := Eval hnf in PoType _ depfun_poMixin.
+Definition dfun_poMixin := PoMixin fun_apprP.
+Canonical dfun_poType := Eval hnf in PoType _ dfun_poMixin.
 
-End DepFunPo.
+End DFunPo.
 
 Canonical fun_poType (T : Type) (S : poType) :=
-  Eval hnf in @depfun_poType T (fun _ => S).
+  Eval hnf in @dfun_poType T (fun _ => S).
 
 Definition mono_poMixin (T S : poType) :=
   [poMixin of mono T S by <:].
@@ -657,7 +657,7 @@ Qed.
 
 End Supremum.
 
-Lemma depfun_supP T (S : T -> poType) (f : nat -> depfun_poType S) sup_f :
+Lemma dfun_supP T (S : T -> poType) (f : nat -> dfun_poType S) sup_f :
   (forall x, sup (f^~ x) (sup_f x)) -> sup f sup_f.
 Proof.
 move=> sup_fP; split.
@@ -764,11 +764,11 @@ Definition subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
 
 End SubCpo.
 
-Section DepFunCpo.
+Section DFunCpo.
 
 Variables (T : Type) (S : T -> cpoType).
 
-Lemma depfun_supPV (f : chain (depfun_poType S)) :
+Lemma dfun_supPV (f : chain (dfun_poType S)) :
   {sup_f | forall x, sup (f^~ x) (sup_f x)}.
 Proof.
 have f_mono: forall x, monotone (f^~ x).
@@ -776,31 +776,31 @@ have f_mono: forall x, monotone (f^~ x).
 by exists (fun x => val (supP (Mono (f_mono x))))=> x; apply: valP.
 Qed.
 
-Lemma depfun_cpoMixin : Cpo.mixin_of (depfun_poType S).
+Lemma dfun_cpoMixin : Cpo.mixin_of (dfun_poType S).
 Proof.
-split=> /= f; have [sup_f sup_fP] := depfun_supPV f.
-exists sup_f; exact: depfun_supP sup_fP.
+split=> /= f; have [sup_f sup_fP] := dfun_supPV f.
+exists sup_f; exact: dfun_supP sup_fP.
 Qed.
 
-Canonical depfun_cpoType :=
+Canonical dfun_cpoType :=
   Cpo.Pack (@Cpo.Class _
-              (PoChoice.Class (depfun_poMixin S) (depfun_choiceMixin S))
-              depfun_cpoMixin).
+              (PoChoice.Class (dfun_poMixin S) (dfun_choiceMixin S))
+              dfun_cpoMixin).
 
-Lemma depfun_sup_pointwise (f : chain depfun_cpoType) sup_f :
+Lemma dfun_sup_pointwise (f : chain dfun_cpoType) sup_f :
   sup f sup_f ->
   forall x, sup (f^~ x) (sup_f x).
 Proof.
 move=> sup_fP.
-have [sup_f' PW] := depfun_supPV f.
-have sup_f'P := depfun_supP PW.
+have [sup_f' PW] := dfun_supPV f.
+have sup_f'P := dfun_supP PW.
 by rewrite (sup_unique sup_fP sup_f'P).
 Qed.
 
-End DepFunCpo.
+End DFunCpo.
 
 Definition fun_cpoType (T : Type) (S : cpoType) :=
-  Eval hnf in @depfun_cpoType T (fun _ => S).
+  Eval hnf in @dfun_cpoType T (fun _ => S).
 
 Section MonoCpo.
 
@@ -812,7 +812,7 @@ Proof.
 set F := val \o f.
 have F_mono : monotone F by apply: monotone_comp monotone_val (valP f).
 move=> sup_fP x y xy.
-have PW := @depfun_sup_pointwise T (fun _ => S) (Mono F_mono) _ sup_fP.
+have PW := @dfun_sup_pointwise T (fun _ => S) (Mono F_mono) _ sup_fP.
 case: (PW x)=> _; apply=> n /=.
 case: (PW y)=> /(_ n) /= ub_y _.
 by apply: transitivity ub_y; apply: (valP (f n)) xy.
