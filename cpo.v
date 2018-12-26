@@ -53,6 +53,10 @@ Proof. by elim/SubP=> x Px; rewrite SubK. Qed.
 Lemma vrefl : forall x, P x -> x = x. Proof. by []. Qed.
 Definition vrefl_rect := vrefl.
 
+Definition clone_subType U v :=
+  fun sT & sub_sort sT -> U =>
+  fun c Urec cK (sT' := @SubType U v c Urec cK) & phant_id sT' sT => sT'.
+
 End SubType.
 
 Local Notation inlined_sub_rect :=
@@ -62,9 +66,13 @@ Arguments SubType {_ _} _ _ _ _ _.
 Arguments vrefl_rect {_ _} _ _.
 Arguments Sub {_ _ _} _ _.
 Arguments val {_ _ _} _.
+Arguments clone_subType [T P] U v [sT] _ [c Urec cK].
 
 Notation "[ 'subType' 'for' v ]" := (SubType _ v _ inlined_sub_rect vrefl_rect)
  (at level 0, only parsing) : form_scope.
+
+Notation "[ 'subType' 'of' U ]" := (clone_subType U _ id id)
+ (at level 0, format "[ 'subType'  'of'  U ]") : form_scope.
 
 Canonical sig_subType (T : Type) (P : T -> Prop) :=
   [subType for @sval T P].
@@ -132,7 +140,7 @@ Canonical subType_choiceType := ChoiceType sT subType_choiceMixin.
 End SubChoice.
 
 Notation "[ 'choiceMixin' 'of' T 'by' <: ]" :=
-  (@subType_choiceMixin _ _ _ : Choice.mixin_of T)
+  (@subType_choiceMixin _ _ [subType of T])
   (at level 0, format "[ 'choiceMixin'  'of'  T  'by'  <: ]") : form_scope.
 
 Section SigChoice.
@@ -190,7 +198,7 @@ Canonical depfun_choiceType := Eval hnf in ChoiceType (forall i, T_ i) depfun_ch
 
 End DepFunChoice.
 
-Definition fun_choiceType T (S : choiceType) :=
+Canonical fun_choiceType T (S : choiceType) :=
   Eval hnf in @depfun_choiceType T (fun _ => S).
 
 Section Singletons.
@@ -825,9 +833,8 @@ Record cont := Cont {
 }.
 
 Canonical cont_subType := [subType for cont_val].
-(* FIXME: This does not work if the form notation is used. *)
 Definition mono_choiceMixin :=
-  @subType_choiceMixin (fun_choiceType T S) _ _ : Choice.mixin_of (mono T S).
+  [choiceMixin of mono T S by <:].
 Canonical mono_choiceType :=
   Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
 Definition cont_poMixin :=
