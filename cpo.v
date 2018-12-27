@@ -28,10 +28,10 @@ Notation "[ 'find' v | t1 ~ t2 ] rest" :=
 Notation "[ 'find' v : T | t1 ~ t2 ] rest" :=
   (fun (v : T) (_ : phant_id t1 t2) => rest)
   (at level 0, v ident, rest at level 10, right associativity) : form_scope.
-Notation "[ 'find' v | t1 ~ t2 & msg ] rest" :=
+Notation "[ 'find' v | t1 ~ t2 | msg ] rest" :=
   (fun v (_ : phant_id_err t1 t2 msg) => rest)
   (at level 0, v ident, rest at level 10, right associativity) : form_scope.
-Notation "[ 'find' v : T | t1 ~ t2 & msg ] rest" :=
+Notation "[ 'find' v : T | t1 ~ t2 | msg ] rest" :=
   (fun (v : T) (_ : phant_id_err t1 t2 msg) => rest)
   (at level 0, v ident, rest at level 10, right associativity) : form_scope.
 Notation "’Error: t msg" := (phant_id_err _ t msg)
@@ -547,8 +547,8 @@ Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack T :=
-  [find p  | Po.sort p ~ T & "not a poType" ]
-  [find c  | Choice.sort c ~ T & "not a choiceType" ]
+  [find p  | Po.sort p ~ T | "not a poType" ]
+  [find c  | Choice.sort c ~ T | "not a choiceType" ]
   [find pm | Po.class p ~ pm ]
   [find cm | Choice.class c ~ cm ]
   @Pack T (Class pm cm).
@@ -625,6 +625,7 @@ Qed.
 
 Definition subsing_poMixin := PoMixin subsing_apprP.
 Canonical subsing_poType := Eval hnf in PoType (subsing T) subsing_poMixin.
+Canonical subsing_poChoiceType := Eval hnf in PoChoiceType (subsing T).
 
 Lemma subsing_of_appr x y : subsing_of x ⊑ subsing_of y <-> x ⊑ y.
 Proof.
@@ -635,6 +636,7 @@ Qed.
 Definition sing_poMixin := [poMixin of sing T by <:].
 Canonical sing_poType := Eval hnf in PoType (sing T) sing_poMixin.
 Canonical sing_subPoType := Eval hnf in [subPoType of sing T].
+Canonical sing_poChoiceType := Eval hnf in PoChoiceType (sing T).
 
 End SubsingPo.
 
@@ -726,9 +728,10 @@ Definition clone c of phant_id class c := @Pack T c.
 Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
-Definition pack (bT_po : Po.class_of T) (m : mixin_of (Po.Pack bT_po)) :=
-  fun b bT_choice & phant_id (Choice.class b) bT_choice =>
-  @Pack T (@Class T (PoChoice.Class bT_po bT_choice) m).
+Definition pack :=
+  [find b | PoChoice.sort b ~ T | "not a poChoiceType" ]
+  [find c | PoChoice.class b ~ c ]
+  fun m => @Pack T (@Class _ c m).
 
 Definition poChoiceType := @PoChoice.Pack cT xclass.
 Definition choiceType := @Choice.Pack cT xclass.
@@ -747,7 +750,7 @@ Coercion poType : type >-> Po.type.
 Canonical poType.
 Notation cpoType := type.
 Notation cpoMixin := mixin_of.
-Notation CpoType T m := (@pack T _ m _ _ id).
+Notation CpoType T m := (@pack T _ unify _ unify m).
 Notation "[ 'cpoType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
   (at level 0, format "[ 'cpoType'  'of'  T  'for'  cT ]") : form_scope.
 Notation "[ 'cpoType' 'of' T ]" := (@clone T _ _ id)
@@ -781,21 +784,41 @@ Section SubCpo.
 
 Variables (T : cpoType) (P : T -> Prop).
 
+Definition subCpo_axiom (S : subPoType P) :=
+  forall (x : chain S) sup_x,
+    sup (val \o x) sup_x -> P sup_x.
+
 Record subCpoType := SubCpoType {
   subCpo_sort :> subPoType P;
-  _           :  forall (x : chain subCpo_sort) sup_x,
-                 sup (val \o x) sup_x -> P sup_x
+  _           :  subCpo_axiom subCpo_sort
 }.
 
-Print Grammar constr.
-
 Definition clone_subCpoType (U : Type) :=
-  [find sT1 : subType P   | sub_sort    sT1 ~ U   & "not a subType"    ]
-  [find sT2 : subPoType P | subPo_sort  sT2 ~ sT1 & "not a subPoType"  ]
-  [find sT  : subCpoType  | subCpo_sort sT  ~ sT2 & "not a subCpoType" ]
+  [find sT1 : subType P   | sub_sort    sT1 ~ U   | "not a subType"    ]
+  [find sT2 : subPoType P | subPo_sort  sT2 ~ sT1 | "not a subPoType"  ]
+  [find sT  : subCpoType  | subCpo_sort sT  ~ sT2 | "not a subCpoType" ]
   sT.
 
 Variable sT : subCpoType.
+
+Lemma subCpo_supP (x : chain sT) (sup_x : sT) :
+  sup x sup_x <-> sup (val \o x) (val sup_x).
+Proof.
+case: (sT) x sup_x=> [sS sSP] /= x sup_x; split=> sup_xP.
+- have [/= vsup_x vsup_xP] := supP (mono_comp (Mono monotone_val) x).
+  have Pvsup_x := sSP _ _ vsup_xP.
+  suffices -> : val sup_x = vsup_x by [].
+  rewrite -[RHS](SubK sS Pvsup_x); congr val.
+  have [ub_x least_x] := vsup_xP.
+  apply: sup_unique sup_xP _; split.
+    by move=> n; rewrite appr_val SubK; apply: ub_x.
+  move=> y ub_y; rewrite appr_val SubK; apply: least_x.
+  move=> n /=; rewrite -appr_val; exact: ub_y.
+- have [ub_x least_x] := sup_xP; split.
+    move=> n; rewrite appr_val; apply: ub_x.
+  move=> y ub_y; rewrite appr_val; apply: least_x.
+  move=> n /=; rewrite -appr_val; exact: ub_y.
+Qed.
 
 Lemma SubCpoMixin : Cpo.mixin_of sT.
 Proof.
@@ -810,11 +833,10 @@ exists (Sub sup_x (clos _ _ sup_xP)); split.
   move=> n /=; rewrite -appr_val; exact: ub_y.
 Qed.
 
+Canonical subCpoType_poChoiceType := Eval hnf in PoChoiceType sT.
 Canonical subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
 
 End SubCpo.
-
-Coercion subCpoType_cpoType : subCpoType >-> cpoType.
 
 Notation "[ 'subCpoType' 'of' T ]" :=
   (@clone_subCpoType _ _ T _ unify _ unify _ unify)
@@ -841,10 +863,7 @@ split=> /= f; have [sup_f sup_fP] := dfun_supPV f.
 exists sup_f; exact: dfun_supP sup_fP.
 Qed.
 
-Canonical dfun_cpoType :=
-  Cpo.Pack (@Cpo.Class _
-              (PoChoice.Class (dfun_poMixin S) (dfun_choiceMixin S))
-              dfun_cpoMixin).
+Canonical dfun_cpoType := Eval hnf in CpoType (dfun S) dfun_cpoMixin.
 
 Lemma dfun_sup_pointwise (f : chain dfun_cpoType) sup_f :
   sup f sup_f ->
@@ -859,16 +878,15 @@ Qed.
 End DFunCpo.
 
 Canonical sfun_cpoType (T : Type) (S : cpoType) :=
-  Eval hnf in @dfun_cpoType T (fun _ => S).
+  Eval hnf in CpoType (sfun T S) (dfun_cpoMixin _).
 
 Section MonoCpo.
 
 Variables (T : poType) (S : cpoType).
 
-Lemma mono_sup_clos (f : chain (mono_poType T S)) (sup_f : fun_cpoType T S) :
-  sup (val \o f) sup_f -> monotone sup_f.
+Lemma mono_sup_clos : subCpo_axiom (mono_subPoType T S).
 Proof.
-set F := val \o f.
+move=> f sup_f; set F := val \o f.
 have F_mono : monotone F by apply: monotone_comp monotone_val (valP f).
 move=> sup_fP x y xy.
 have PW := @dfun_sup_pointwise T (fun _ => S) (Mono F_mono) _ sup_fP.
@@ -907,14 +925,12 @@ Record cont := Cont {
 }.
 
 Canonical cont_subType := [subType for cont_val].
-Definition cont_poMixin :=
-  [poMixin of cont by <:].
-Canonical cont_poType :=
-  Eval hnf in PoType cont cont_poMixin.
-Definition cont_choiceMixin :=
-  [choiceMixin of cont by <:].
-Canonical cont_choiceType :=
-  Eval hnf in ChoiceType cont cont_choiceMixin.
+Definition cont_poMixin := [poMixin of cont by <:].
+Canonical cont_poType := Eval hnf in PoType cont cont_poMixin.
+Canonical cont_subPoType := [subPoType of cont].
+Definition cont_choiceMixin := [choiceMixin of cont by <:].
+Canonical cont_choiceType := Eval hnf in ChoiceType cont cont_choiceMixin.
+Canonical cont_poChoiceType := Eval hnf in PoChoiceType cont.
 
 Lemma eq_cont (f g : cont) : (forall x, f x = g x) -> f = g.
 Proof.
@@ -922,43 +938,35 @@ move=> e; do 2![apply: val_inj].
 exact: functional_extensionality e.
 Qed.
 
-Lemma cont_cpoMixin : Cpo.mixin_of [poType of cont].
+Lemma cont_sup_clos : subCpo_axiom cont_subPoType.
 Proof.
-split=> /= f.
-have f_mono1: forall x, monotone (f^~ x).
-  by move=> x n1 n2 n1n2; apply: (valP f n1 n2 n1n2).
-pose sup_f x := val (supP (Mono (f_mono1 x))).
-have sup_fP  :  forall x, sup (f^~ x) (sup_f x).
-  move=> x; apply: valP.
-have sup_f_mono : monotone sup_f.
-  move=> x1 x2 x1x2.
-  case: (sup_fP x1) (sup_fP x2)=> /= [ub_x1 least_x1] [ub_x2 least_x2].
-  apply: least_x1=> n; apply: transitivity (f n x2) _ _ (ub_x2 n).
-  exact: (valP (val (f n))).
-have sup_f_cont : continuous sup_f.
-  move=> x.
-  have fnx_mono : forall n, monotone (f n \o x).
-    by move=> n; apply: monotone_comp (valP (val _)) (valP _).
-  pose g n := val (supP (Mono (fnx_mono n))).
-  have gP  :  forall n, sup (f n \o x) (g n).
-    by move=> n; apply: valP.
-  have g_mono : monotone g.
-    move=> n1 n2 n1n2.
-    case: (gP n1) (gP n2)=> /= [ub_n1 least_n1] [ub_n2 least_n2].
-    apply: least_n1=> m; apply: transitivity (f n2 (x m)) _ _ (ub_n2 m).
-    exact: (valP f).
-  have -> : sup_f (val (supP x)) = val (supP (Mono g_mono)).
-    rewrite /sup_f; congr (val (supP _)); apply/val_inj=> /=.
-    apply: functional_extensionality=> n.
-    apply: sup_unique (valP (f n) x) (gP n).
-  rewrite (@supC _ _ (sup_f \o x) g _ gP); first exact: valP.
-  move=> n /=; exact: sup_fP.
-exists (@Cont (Mono sup_f_mono) sup_f_cont); split.
-- by move=> n x /=; case: (sup_fP x)=> [ub_f _]; apply: ub_f.
-- move=> g ub_g x /=; case: (sup_fP x)=> [_ least_f]; apply: least_f.
-  move=> n; exact: ub_g.
+move=> f sup_f.
+rewrite -[val \o _]/(val (mono_comp (Mono monotone_val) _)).
+move/subCpo_supP.
+rewrite -[val \o _]/(val (mono_comp (Mono monotone_val) _)).
+move/dfun_sup_pointwise=> sup_fP x.
+have fnx_mono : forall n, monotone (f n \o x).
+  by move=> n; apply: monotone_comp (valP (val _)) (valP _).
+pose g n := val (supP (Mono (fnx_mono n))).
+have gP  :  forall n, sup (f n \o x) (g n).
+  by move=> n; apply: valP.
+have g_mono : monotone g.
+  move=> n1 n2 n1n2.
+  case: (gP n1) (gP n2)=> /= [ub_n1 least_n1] [ub_n2 least_n2].
+  apply: least_n1=> m; apply: transitivity (f n2 (x m)) _ _ (ub_n2 m).
+  exact: (valP f).
+have -> : sup_f (val (supP x)) = val (supP (Mono g_mono)).
+  apply: sup_unique (sup_fP (val (supP x))) _.
+  move: (valP (supP (Mono g_mono)))=> /=.
+  rewrite {1}(_ : g = f^~ (sval (supP x))) //.
+  apply: functional_extensionality=> n.
+  exact: sup_unique (gP n) (valP (f n) x).
+rewrite (@supC _ _ (sup_f \o x) g _ gP); first exact: valP.
+move=> n /=; exact: sup_fP.
 Qed.
 
+Canonical cont_subCpoType := SubCpoType cont_sup_clos.
+Definition cont_cpoMixin := [cpoMixin of cont by <:].
 Canonical cont_cpoType := Eval hnf in CpoType cont cont_cpoMixin.
 
 End Continuous.
