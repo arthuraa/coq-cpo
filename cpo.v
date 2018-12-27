@@ -3,6 +3,9 @@ Require Import Coq.Logic.PropExtensionality.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Classes.RelationClasses.
+Require Import Coq.Strings.String.
+
+Open Scope string_scope.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,6 +19,29 @@ Unset Printing Implicit Defensive.
 *)
 
 Obligation Tactic := idtac.
+Definition phant_id_err {T1 T2} (t1 : T1) (t2 : T2) (s : string) :=
+  phantom T1 t1 -> phantom T2 t2.
+Definition unify {T} {t : T} (x : phantom T t) := x.
+Notation "[ 'find' v | t1 ~ t2 ] rest" :=
+  (fun v (_ : phant_id t1 t2) => rest)
+  (at level 0, v ident, rest at level 10, right associativity) : form_scope.
+Notation "[ 'find' v : T | t1 ~ t2 ] rest" :=
+  (fun (v : T) (_ : phant_id t1 t2) => rest)
+  (at level 0, v ident, rest at level 10, right associativity) : form_scope.
+Notation "[ 'find' v | t1 ~ t2 & msg ] rest" :=
+  (fun v (_ : phant_id_err t1 t2 msg) => rest)
+  (at level 0, v ident, rest at level 10, right associativity) : form_scope.
+Notation "[ 'find' v : T | t1 ~ t2 & msg ] rest" :=
+  (fun (v : T) (_ : phant_id_err t1 t2 msg) => rest)
+  (at level 0, v ident, rest at level 10, right associativity) : form_scope.
+Notation "’Error: t msg" := (phant_id_err _ t msg)
+  (at level 0) : form_scope.
+
+Definition dfun T (S : T -> Type) := forall x, S x.
+Definition sfun T S := T -> S.
+
+Identity Coercion fun_of_dfun : dfun >-> Funclass.
+Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
 Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
   f \o (g \o h) = f \o g \o h.
@@ -194,12 +220,13 @@ apply: functional_extensionality_dep=> i.
 by move: (svalP (choiceP (ex1 i)) _ Pg)=> ->.
 Qed.
 
-Canonical dfun_choiceType := Eval hnf in ChoiceType (forall i, T_ i) dfun_choiceMixin.
+Canonical dfun_choiceType :=
+  Eval hnf in ChoiceType (dfun T_) dfun_choiceMixin.
 
 End DFunChoice.
 
-Canonical fun_choiceType T (S : choiceType) :=
-  Eval hnf in @dfun_choiceType T (fun _ => S).
+Canonical sfun_choiceType T (S : choiceType) :=
+  Eval hnf in ChoiceType (sfun T S) (dfun_choiceMixin _).
 
 Section Singletons.
 
@@ -394,7 +421,7 @@ Lemma monotone_comp (T S R : poType) (f : S -> R) (g : T -> S) :
 Proof. by move=> mono_f mono_g x y /mono_g/mono_f. Qed.
 
 Record mono (T S : poType) := Mono {
-  mono_val :> T -> S;
+  mono_val :> sfun T S;
   _        :  monotone mono_val
 }.
 
@@ -475,12 +502,12 @@ split.
 Qed.
 
 Definition dfun_poMixin := PoMixin fun_apprP.
-Canonical dfun_poType := Eval hnf in PoType _ dfun_poMixin.
+Canonical dfun_poType := Eval hnf in PoType (dfun T_) dfun_poMixin.
 
 End DFunPo.
 
-Canonical fun_poType (T : Type) (S : poType) :=
-  Eval hnf in @dfun_poType T (fun _ => S).
+Canonical sfun_poType (T : Type) (S : poType) :=
+  Eval hnf in PoType (sfun T S) (dfun_poMixin _).
 
 Definition mono_poMixin (T S : poType) :=
   [poMixin of mono T S by <:].
@@ -519,6 +546,13 @@ Definition clone c of phant_id class c := @Pack T c.
 Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
+Definition pack T :=
+  [find p  | Po.sort p ~ T & "not a poType" ]
+  [find c  | Choice.sort c ~ T & "not a choiceType" ]
+  [find pm | Po.class p ~ pm ]
+  [find cm | Choice.class c ~ cm ]
+  @Pack T (Class pm cm).
+
 Definition choiceType := @Choice.Pack cT xclass.
 Definition poType := @Po.Pack cT xclass.
 
@@ -533,6 +567,7 @@ Canonical poType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
 Notation poChoiceType := type.
+Notation PoChoiceType T := (@pack T _ unify _ unify _ unify _ unify).
 Notation "[ 'poChoiceType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
   (at level 0, format "[ 'poChoiceType'  'of'  T  'for'  cT ]") : form_scope.
 Notation "[ 'poChoiceType' 'of' T ]" := (@clone T _ _ id)
@@ -543,6 +578,11 @@ End PoChoice.
 
 Export PoChoice.Exports.
 
+Canonical dfun_poChoiceType T (S : T -> poChoiceType) :=
+  PoChoiceType (dfun S).
+Canonical sfun_poChoiceType T (S : poChoiceType) :=
+  PoChoiceType (sfun T S).
+
 Section MonotoneChoice.
 
 Variables (T : poType) (S : poChoiceType).
@@ -551,6 +591,8 @@ Definition mono_choiceMixin :=
   [choiceMixin of mono T S by <:].
 Canonical mono_choiceType :=
   Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
+Canonical mono_poChoiceType :=
+  Eval hnf in PoChoiceType (mono T S).
 
 End MonotoneChoice.
 
@@ -745,6 +787,14 @@ Record subCpoType := SubCpoType {
                  sup (val \o x) sup_x -> P sup_x
 }.
 
+Print Grammar constr.
+
+Definition clone_subCpoType (U : Type) :=
+  [find sT1 : subType P   | sub_sort    sT1 ~ U   & "not a subType"    ]
+  [find sT2 : subPoType P | subPo_sort  sT2 ~ sT1 & "not a subPoType"  ]
+  [find sT  : subCpoType  | subCpo_sort sT  ~ sT2 & "not a subCpoType" ]
+  sT.
+
 Variable sT : subCpoType.
 
 Lemma SubCpoMixin : Cpo.mixin_of sT.
@@ -760,9 +810,18 @@ exists (Sub sup_x (clos _ _ sup_xP)); split.
   move=> n /=; rewrite -appr_val; exact: ub_y.
 Qed.
 
-Definition subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
+Canonical subCpoType_cpoType := Eval hnf in CpoType sT SubCpoMixin.
 
 End SubCpo.
+
+Coercion subCpoType_cpoType : subCpoType >-> cpoType.
+
+Notation "[ 'subCpoType' 'of' T ]" :=
+  (@clone_subCpoType _ _ T _ unify _ unify _ unify)
+  (at level 0, format "[ 'subCpoType'  'of'  T ]") : form_scope.
+Notation "[ 'cpoMixin' 'of' T 'by' <: ]" :=
+  (@SubCpoMixin _ _ [subCpoType of T])
+  (at level 0, format "[ 'cpoMixin'  'of'  T  'by'  <: ]") : form_scope.
 
 Section DFunCpo.
 
@@ -799,7 +858,7 @@ Qed.
 
 End DFunCpo.
 
-Definition fun_cpoType (T : Type) (S : cpoType) :=
+Canonical sfun_cpoType (T : Type) (S : cpoType) :=
   Eval hnf in @dfun_cpoType T (fun _ => S).
 
 Section MonoCpo.
@@ -817,6 +876,10 @@ case: (PW x)=> _; apply=> n /=.
 case: (PW y)=> /(_ n) /= ub_y _.
 by apply: transitivity ub_y; apply: (valP (f n)) xy.
 Qed.
+
+Canonical mono_subCpoType := Eval hnf in SubCpoType mono_sup_clos.
+Definition mono_cpoMixin := [cpoMixin of mono T S by <:].
+Canonical mono_cpoType := Eval hnf in CpoType (mono T S) mono_cpoMixin.
 
 End MonoCpo.
 
