@@ -1086,3 +1086,31 @@ Definition invlim_cpoMixin := [cpoMixin of invlim by <:].
 Canonical invlim_cpoType := Eval hnf in CpoType invlim invlim_cpoMixin.
 
 End InverseLimit.
+
+Section Void.
+
+Variant void : Set := .
+
+Lemma void_choiceMixin : Choice.mixin_of void.
+Proof.
+split=> P ex; have [] : False.
+by case: ex=> [[]].
+Qed.
+
+Canonical void_choiceType := Eval hnf in ChoiceType void void_choiceMixin.
+
+Definition void_appr (x y : void) := False.
+
+Lemma void_apprP : Po.axioms void_appr.
+Proof. split; by case. Qed.
+
+Definition void_poMixin := PoMixin void_apprP.
+Canonical void_poType := Eval hnf in PoType void void_poMixin.
+Canonical void_poChoiceType := Eval hnf in PoChoiceType void.
+
+Definition void_cpoMixin : Cpo.mixin_of void_poType.
+Proof. by split=> x; case: (x 0). Qed.
+
+Canonical void_cpoType := Eval hnf in CpoType void void_cpoMixin.
+
+End Void.
