@@ -778,6 +778,9 @@ exists sup_x; split=> // ?.
 exact: sup_unique.
 Qed.
 
+Lemma supE (x : chain T) sup_x : sup x sup_x -> val (supP x) = sup_x.
+Proof. exact/sup_unique/(valP (supP x)). Qed.
+
 End Basics.
 
 Section SubCpo.
@@ -1043,3 +1046,43 @@ Qed.
 Canonical subsing_cpoType := Eval hnf in CpoType (subsing T) subsing_cpoMixin.
 
 End SubsingCpo.
+
+Section InverseLimit.
+
+Variable T : nat -> cpoType.
+Variable e : forall n, cont (T n.+1) (T n).
+
+Record invlim := InvLim {
+  invlim_val : dfun T;
+  _          : forall n, invlim_val n = e n (invlim_val n.+1)
+}.
+
+Canonical invlim_subType := [subType for invlim_val].
+Definition invlim_choiceMixin := [choiceMixin of invlim by <:].
+Canonical invlim_choiceType :=
+  Eval hnf in ChoiceType invlim invlim_choiceMixin.
+Definition invlim_poMixin := [poMixin of invlim by <:].
+Canonical invlim_poType :=
+  Eval hnf in PoType invlim invlim_poMixin.
+Canonical invlim_subPoType := Eval hnf in [subPoType of invlim].
+Canonical invlim_poChoiceType := Eval hnf in PoChoiceType invlim.
+
+Lemma invlim_sup_clos : subCpo_axiom invlim_subPoType.
+Proof.
+move=> x sup_x.
+pose f := mono_comp (Mono monotone_val) x.
+move=> /(@dfun_sup_pointwise _ _ f) sup_xP n.
+have /continuous_mono /= cont_e := valP (e n).
+have fn_mono : forall m, monotone (f^~ m).
+  by move=> m n1 n2 n1n2; apply: (valP f).
+rewrite -(@supE _ (Mono (fn_mono n.+1)) _ (sup_xP n.+1)) -cont_e.
+rewrite -(@supE _ (Mono (fn_mono n)) _ (sup_xP n)).
+congr (val (supP _)); apply/val_inj/functional_extensionality=> m /=.
+exact: (valP (x m)).
+Qed.
+
+Canonical invlim_subCpoType := SubCpoType invlim_sup_clos.
+Definition invlim_cpoMixin := [cpoMixin of invlim by <:].
+Canonical invlim_cpoType := Eval hnf in CpoType invlim invlim_cpoMixin.
+
+End InverseLimit.
