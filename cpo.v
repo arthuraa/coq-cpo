@@ -16,6 +16,10 @@ Unset Printing Implicit Defensive.
 - Test whether wrapping functions in a definition helps with canonical structure
   inference.
 
+- Fix canonical structure inference for mono, cont and friends.
+
+- Better naming conventions for mono, cont, etc instances.
+
 *)
 
 Obligation Tactic := idtac.
@@ -46,6 +50,22 @@ Identity Coercion fun_of_sfun : sfun >-> Funclass.
 Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
   f \o (g \o h) = f \o g \o h.
 Proof. by []. Qed.
+
+Section Casts.
+
+Variable (T : Type).
+Implicit Types (x y z : T).
+
+Definition cast (P : T -> Type) x y (e : x = y) : P x -> P y :=
+  match e with erefl => id end.
+
+Lemma castD (P : T -> Type) x y z (p : x = y) (q : y = z) (a : P x) :
+  cast q (cast p a) = cast (etrans p q) a.
+Proof. by case: z / q=> /=. Qed.
+
+End Casts.
+
+Arguments cast {T} P {x y} e.
 
 Section SubType.
 
@@ -429,11 +449,31 @@ Canonical mono_subType (T S : poType) :=
   [subType for @mono_val T S].
 
 Definition mono_comp T S R (f : mono S R) (g : mono T S) : mono T R :=
-  Sub (f \o g) (monotone_comp (valP f) (valP g)).
+  Eval hnf in Sub (f \o g) (monotone_comp (valP f) (valP g)).
+
+Canonical mono_comp.
 
 Lemma mono_compA A B C D (f : mono C D) (g : mono B C) (h : mono A B) :
   mono_comp f (mono_comp g h) = mono_comp (mono_comp f g) h.
 Proof. exact/val_inj. Qed.
+
+Lemma monotone_id (T : poType) : monotone (@id T).
+Proof. by []. Qed.
+
+Definition mono_id (T : poType) : mono T T :=
+  Eval hnf in Sub idfun (@monotone_id T).
+
+Canonical mono_id.
+
+Arguments mono_id {_}.
+
+Lemma monotone_cast T (S : T -> poType) (x y : T) (e : x = y) : monotone (cast S e).
+Proof. by case: y / e. Qed.
+
+Definition mono_cast T (S : T -> poType) (x y : T) (e : x = y) : mono _ _ :=
+  Eval hnf in Sub (cast S e) (monotone_cast e).
+
+Canonical mono_cast.
 
 Section SubPoType.
 
@@ -459,6 +499,11 @@ Proof. by rewrite /appr; case: sT x y=> ? ? /= ->. Qed.
 
 Lemma monotone_val (sT : subPoType) : monotone (@val _ _ sT).
 Proof. by move=> x y; rewrite appr_val. Qed.
+
+Definition mono_val' (sT : subPoType) : mono (subPoType_poType sT) T :=
+  Eval hnf in Sub val (@monotone_val sT).
+
+Canonical mono_val'.
 
 Variable sT : subType P.
 
@@ -989,11 +1034,34 @@ Qed.
 Definition cont_comp (f : cont S R) (g : cont T S) : cont T R :=
   Sub (mono_comp f g) (continuous_comp (valP f) (valP g)).
 
+Lemma continuous_id : continuous (@id T).
+Proof. move=> x; exact: (valP (supP x)). Qed.
+
+Definition cont_id : cont T T :=
+  Sub mono_id continuous_id.
+
 End ContinuousComp.
+
+Arguments cont_id {_}.
 
 Lemma cont_compA A B C D (f : cont C D) (g : cont B C) (h : cont A B) :
   cont_comp f (cont_comp g h) = cont_comp (cont_comp f g) h.
 Proof. exact/val_inj/mono_compA. Qed.
+
+Lemma continuous_cast T (S : T -> cpoType) x y (e : x = y) : continuous (cast S e).
+Proof. case: y / e=> /=; exact: continuous_id. Qed.
+
+Definition cont_cast T (S : T -> cpoType) x y (e : x = y) : cont _ _ :=
+  Sub (mono_cast S e) (continuous_cast e).
+
+Lemma continuous_valV (T S : cpoType) (P : S -> Prop) (sS : subCpoType P) (f : T -> sS) :
+  continuous (val \o f) ->  continuous f.
+Proof.
+move=> cont_f x; have [ub_x least_x] := cont_f x; split.
+  by move=> n; move: (ub_x n); rewrite /= appr_val.
+move=> y ub_y; move: (least_x (val y)); rewrite /= -appr_val.
+by apply=> n; move: (ub_y n); rewrite /= -appr_val.
+Qed.
 
 Section SubsingCpo.
 
@@ -1050,11 +1118,11 @@ End SubsingCpo.
 Section InverseLimit.
 
 Variable T : nat -> cpoType.
-Variable e : forall n, cont (T n.+1) (T n).
+Variable p : forall n, cont (T n.+1) (T n).
 
 Record invlim := InvLim {
   invlim_val : dfun T;
-  _          : forall n, invlim_val n = e n (invlim_val n.+1)
+  _          : forall n, invlim_val n = p n (invlim_val n.+1)
 }.
 
 Canonical invlim_subType := [subType for invlim_val].
@@ -1072,7 +1140,7 @@ Proof.
 move=> x sup_x.
 pose f := mono_comp (Mono monotone_val) x.
 move=> /(@dfun_sup_pointwise _ _ f) sup_xP n.
-have /continuous_mono /= cont_e := valP (e n).
+have /continuous_mono /= cont_e := valP (p n).
 have fn_mono : forall m, monotone (f^~ m).
   by move=> m n1 n2 n1n2; apply: (valP f).
 rewrite -(@supE _ (Mono (fn_mono n.+1)) _ (sup_xP n.+1)) -cont_e.
@@ -1086,6 +1154,241 @@ Definition invlim_cpoMixin := [cpoMixin of invlim by <:].
 Canonical invlim_cpoType := Eval hnf in CpoType invlim invlim_cpoMixin.
 
 End InverseLimit.
+
+Section Projections.
+
+Definition projection (T S : cpoType) (p : T -> S) (e : S -> T) :=
+  cancel e p /\ forall x, e (p x) ⊑ x.
+
+Record proj (T S : cpoType) := Proj {
+  proj_val :> cont T S;
+  _        :  exists e : mono S T, projection proj_val e
+}.
+
+Canonical proj_subType (T S : cpoType) := [subType for @proj_val T S].
+Definition proj_choiceMixin T S := [choiceMixin of proj T S by <:].
+Canonical proj_choiceType T S := Eval hnf in ChoiceType (proj T S) (proj_choiceMixin T S).
+
+Lemma projectionA (T S : cpoType) (p : mono T S) (e : mono S T) x y :
+  projection p e -> e x ⊑ y <-> x ⊑ p y.
+Proof.
+case=> eK pD; split; first by move=> /(valP p) /=; rewrite eK.
+by move=> /(valP e) /= H; apply: transitivity H (pD _).
+Qed.
+
+Lemma embedding_iso (T S : cpoType) (p : mono T S) (e : mono S T) x y :
+  projection p e -> e x ⊑ e y -> x ⊑ y.
+Proof. by case=> eK _ /(valP p); rewrite /= !eK. Qed.
+
+Lemma embedding_cont (T S : cpoType) (p : mono T S) (e : mono S T) :
+  projection p e -> continuous e.
+Proof.
+move=> pe x; case: (supP x)=> [sup_x [/= ub_x least_x]]; split.
+  by move=> n /=; apply: (valP e).
+move=> y ub_y; apply/(projectionA _ _ pe); apply: least_x.
+by move=> n; apply/(projectionA _ _ pe); apply: ub_y.
+Qed.
+
+Lemma embedding_unique (T S : cpoType) (p : mono T S) (e1 e2 : mono S T) :
+  projection p e1 -> projection p e2 -> e1 = e2.
+Proof.
+move=> e1P e2P; apply: val_inj; apply: functional_extensionality=> x /=.
+apply: appr_anti; rewrite projectionA; eauto.
+- rewrite e2P.1; reflexivity.
+- rewrite e1P.1; reflexivity.
+Qed.
+
+Lemma proj_emb_ex (T S : cpoType) (p : proj T S) : {e : cont S T | projection p e}.
+Proof.
+pose p_proj : subsing _ := Sub (fun e : mono S T => projection p e) (@embedding_unique _ _ p).
+case: (@choose _ p_proj (valP p))=> /= e pe.
+have e_cont := embedding_cont pe.
+by exists (Cont e_cont).
+Qed.
+
+Definition proj_emb (T S : cpoType) (p : proj T S) := val (proj_emb_ex p).
+
+Definition proj_embP (T S : cpoType) (p : proj T S) := valP (proj_emb_ex p).
+
+Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e").
+
+Variables T S R : cpoType.
+
+Lemma embK (p : proj T S) : cancel p^e p.
+Proof. by case: (proj_embP p). Qed.
+
+Lemma projD (p : proj T S) x : p^e (p x) ⊑ x.
+Proof. by case: (proj_embP p). Qed.
+
+Lemma projA (p : proj T S) x y : p^e x ⊑ y <-> x ⊑ p y.
+Proof. by apply: projectionA; apply: proj_embP. Qed.
+
+Lemma projection_id : projection (@id T) id.
+Proof. by split=> x; reflexivity. Qed.
+
+Lemma proj_id_proof : exists e : mono T T, projection id e.
+Proof. exists cont_id; exact: projection_id. Qed.
+
+Definition proj_id : proj T T := Sub cont_id proj_id_proof.
+
+Lemma emb_id : proj_id^e = cont_id.
+Proof.
+move: (proj_embP proj_id)=> H.
+apply: val_inj.
+apply: embedding_unique H _; apply: projection_id.
+Qed.
+
+Lemma projection_comp (p1 : mono S R) (e1 : mono R S)
+                      (p2 : mono T S) (e2 : mono S T) :
+  projection p1 e1 -> projection p2 e2 -> projection (p1 \o p2) (e2 \o e1).
+Proof.
+move=> [e1K p1D] [e2K p2D]; split; first by apply: can_comp.
+move=> x /=.
+have /= H := valP e2 _ _ (p1D (p2 x)).
+apply: transitivity H _; apply: p2D.
+Qed.
+
+Lemma proj_comp_proof (p1 : proj S R) (p2 : proj T S) :
+  exists e : mono R T, projection (mono_comp p1 p2) e.
+Proof.
+by exists (cont_comp p2^e p1^e); apply: projection_comp; apply: proj_embP.
+Qed.
+
+Definition proj_comp (p1 : proj S R) (p2 : proj T S) : proj T R :=
+  Sub (cont_comp p1 p2) (proj_comp_proof p1 p2).
+
+Lemma emb_comp (p1 : proj S R) (p2 : proj T S) :
+  (proj_comp p1 p2)^e = cont_comp p2^e p1^e.
+Proof.
+move: (proj_embP (proj_comp p1 p2)) => H.
+apply: val_inj.
+apply: embedding_unique H _; apply: projection_comp; apply: proj_embP.
+Qed.
+
+End Projections.
+
+Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e") : cpo_scope.
+
+Section BiLimit.
+
+Variables (T : nat -> cpoType) (p : forall n, proj (T n.+1) (T n)).
+
+Fixpoint down n m : proj (T (m + n)) (T n) :=
+  match m with
+  | 0    => @proj_id _
+  | m.+1 => proj_comp (down n m) (p (m + n))
+  end.
+
+Lemma downSn n m x : p n (down n.+1 m x) = down n m.+1 (cast T (addnS _ _) x).
+Proof.
+elim: m x=> [|m IH] /=; first by move=> x; rewrite eq_axiomK.
+move=> x; rewrite IH /=; congr (down _ _ (p _ _)).
+move: (addnS m n) (addnS m.+1 n) x; rewrite -![m.+1 + _]/((m + _).+1).
+move: (m + n.+1) (m + n).+1=> a b q.
+by case: b / q=> q x /=; rewrite eq_axiomK.
+Qed.
+
+Definition inlim_def n x m : T m :=
+  down m n (cast T (addnC _ _) ((down n m)^e x)).
+
+Lemma inlim_proof n (x : T n) m : inlim_def x m = p m (inlim_def x m.+1).
+Proof.
+rewrite /inlim_def downSn /= castD; congr (down m n _).
+move: (addnC m n) (etrans _ _); rewrite -[_.+1 + _]/(_ + _).+1=> q.
+by case: (n + m) / q => /= q; rewrite !eq_axiomK /= emb_comp /= embK.
+Qed.
+
+Definition inlim n x : invlim p :=
+  Sub (@inlim_def n x) (@inlim_proof n x).
+
+Lemma monotone_inlim n : monotone (@inlim n).
+Proof.
+move=> x y xy m; rewrite /= /inlim_def /=.
+apply: (valP (val (val (down m n)))).
+move: (valP (val (down n m)^e) _ _ xy) => /=.
+move: ((down n m)^e x) ((down n m)^e y)=> {x y xy}.
+by case: (n + m) / (addnC _ _).
+Qed.
+
+Definition mono_inlim n : mono (T n) (invlim_poType p) :=
+  Sub (@inlim n) (@monotone_inlim n).
+
+Lemma continuous_inlim n : continuous (@inlim n).
+Proof.
+apply: continuous_valV.
+have ->: val \o @inlim n = @inlim_def n.
+  by apply: functional_extensionality=> x /=.
+move=> x; apply: dfun_supP=> m /=.
+exact: (valP (cont_comp (down m n) (cont_comp (cont_cast _ (addnC m n)) (down n m)^e))).
+Qed.
+
+Definition cont_inlim n : cont (T n) (invlim_cpoType p) :=
+  Sub (mono_inlim n) (@continuous_inlim n).
+
+Definition outlim n (x : invlim p) : T n := val x n.
+
+Lemma up_outlim n m x : (down n m)^e (outlim _ x) ⊑ outlim _ x.
+Proof.
+elim: m=> [|m IH /=]; first by rewrite emb_id; reflexivity.
+rewrite emb_comp.
+apply: transitivity (valP (val (p (m + n))^e) _ _ IH) _.
+rewrite /outlim (valP x) /=; exact: projD.
+Qed.
+
+Lemma down_outlim n m x : down n m (outlim _ x) = outlim _ x.
+Proof.
+elim: m=> [//|m IH /=]; by rewrite -(valP x (m + n)) -IH.
+Qed.
+
+Lemma projection_outlim n : projection (outlim n) (@inlim n).
+Proof.
+split.
+  by move=> x; rewrite /inlim /inlim_def /outlim /= eq_axiomK /= embK.
+move=> x; rewrite appr_val /=; move=> m; rewrite /inlim_def.
+apply: (@transitivity _ _ _ _ (down m n (cast T (addnC m n) (outlim _ x)))).
+  apply: (valP (val (val (down m n)))).
+  apply: monotone_cast; exact: up_outlim.
+rewrite (eq_irrelevance _ _ : addnC m n = esym (addnC n m)).
+move: (m + n) (addnC n m)=> k ek.
+case: k / ek=> /=.
+rewrite down_outlim; reflexivity.
+Qed.
+
+Lemma monotone_outlim n : monotone (outlim n).
+Proof. by move=> x y; rewrite appr_val => /(_ n). Qed.
+
+Definition mono_outlim n : mono (invlim_poType p) (T n) :=
+  Sub (outlim n) (monotone_outlim n).
+
+Lemma continuous_outlim n : continuous (outlim n).
+Proof.
+move=> x; case: (supP x)=> [/= sup_x sup_xP]; split.
+  move=> m; case: sup_xP=> ub_x _; exact: ub_x.
+move/subCpo_supP: sup_xP=> /= sup_xP.
+have /= := @dfun_sup_pointwise _ _ (mono_comp (mono_val' _) x) _ sup_xP n.
+move=> {sup_xP} sup_xP y ub_y.
+by case: sup_xP=> [_ least_x]; apply: least_x.
+Qed.
+
+Definition cont_outlim n : cont (invlim_cpoType p) (T n) :=
+  Sub (mono_outlim n) (continuous_outlim n).
+
+Lemma proj_outlim_proof n : exists e : mono _ _, projection (outlim n) e.
+Proof. exists (mono_inlim n); exact: projection_outlim. Qed.
+
+Definition proj_outlim n : proj (invlim_cpoType p) (T n) :=
+  Sub (cont_outlim n) (proj_outlim_proof n).
+
+Lemma emb_outlim n : (proj_outlim n)^e = cont_inlim n.
+Proof.
+apply: val_inj; move: (projection_outlim n)=> /=.
+(* FIXME: Why can't this be solved by unification? *)
+rewrite -[@inlim n]/(mono_val (mono_inlim n)).
+rewrite -[outlim n]/(mono_val (proj_outlim n)).
+apply: embedding_unique; exact: proj_embP.
+Qed.
+
+End BiLimit.
 
 Section Void.
 
