@@ -120,6 +120,18 @@ Notation "[ 'subType' 'for' v ]" := (SubType _ v _ inlined_sub_rect vrefl_rect)
 Notation "[ 'subType' 'of' U ]" := (clone_subType U _ id id)
  (at level 0, format "[ 'subType'  'of'  U ]") : form_scope.
 
+Local Notation inlined_new_rect :=
+  (fun K K_S u => let (x) as u return K u := u in K_S x).
+
+Definition NewType T U v c Urec :=
+  let Urec' P IH := Urec P (fun x : T => IH x isT : P _) in
+  SubType U v (fun x _ => c x) Urec'.
+
+Arguments NewType [T U].
+
+Notation "[ 'newType' 'for' v ]" := (NewType v _ inlined_new_rect vrefl_rect)
+ (at level 0, only parsing) : form_scope.
+
 Canonical sig_subType (T : Type) (P : T -> Prop) :=
   [subType for @sval T P].
 
@@ -1417,3 +1429,27 @@ Proof. by split=> x; case: (x 0). Qed.
 Canonical void_cpoType := Eval hnf in CpoType void void_cpoMixin.
 
 End Void.
+
+Section Disc.
+
+Variable T : Type.
+
+Record disc := Disc { disc_val : sing T }.
+
+Canonical disc_newType := [newType for disc_val].
+Definition disc_choiceMixin := [choiceMixin of disc by <:].
+Canonical disc_choiceType := Eval hnf in ChoiceType disc disc_choiceMixin.
+Lemma disc_apprP : Po.axioms (@eq disc).
+Proof. split=> //; exact: eq_trans. Qed.
+Definition disc_poMixin := PoMixin disc_apprP.
+Canonical disc_poType := Eval hnf in PoType disc disc_poMixin.
+Canonical disc_poChoiceType := Eval hnf in PoChoiceType disc.
+Lemma disc_cpoMixin : Cpo.mixin_of disc_poType.
+Proof.
+split=> x; exists (x 0); split.
+- by move=> n; rewrite (valP x _ _ (leq0n n)).
+- by move=> y /(_ 0) ->.
+Qed.
+Canonical disc_cpoType := Eval hnf in CpoType disc disc_cpoMixin.
+
+End Disc.
