@@ -67,6 +67,27 @@ End Casts.
 
 Arguments cast {T} P {x y} e.
 
+Section DFunOfProd.
+
+Variables (K : Type) (K_sort : K -> Type).
+Variables T S : K.
+
+Local Coercion K_sort : K >-> Sortclass.
+
+Definition dfun_of_prod (p : T * S) : dfun (fun b => if b then T else S) :=
+  fun b => match b with
+           | true => p.1
+           | false => p.2
+           end.
+
+Definition prod_of_dfun (p : dfun (fun b => if b then T else S)) : T * S :=
+  (p true, p false).
+
+Lemma dfun_of_prodK : cancel dfun_of_prod prod_of_dfun.
+Proof. by case. Qed.
+
+End DFunOfProd.
+
 Section SubType.
 
 Variables (T : Type) (P : T -> Prop).
@@ -259,6 +280,16 @@ End DFunChoice.
 
 Canonical sfun_choiceType T (S : choiceType) :=
   Eval hnf in ChoiceType (sfun T S) (dfun_choiceMixin _).
+
+Section ProdChoice.
+
+Variables T S : choiceType.
+
+Definition prod_choiceMixin :=
+  CanChoiceMixin (@dfun_of_prodK _ Choice.sort T S).
+Canonical prod_choiceType := Eval hnf in ChoiceType (T * S) prod_choiceMixin.
+
+End ProdChoice.
 
 Section Singletons.
 
@@ -543,6 +574,27 @@ Notation "[ 'subPoType' 'of' T ]" :=
   (@pack_subPoType _ _ T _ _ id _ id erefl)
   (at level 0, format "[ 'subPoType'  'of'  T ]") : form_scope.
 
+Section CanPo.
+
+Variables (T : Type) (S : poType).
+Variables (f : T -> S) (g : S -> T).
+Hypothesis fK : cancel f g.
+
+Definition can_appr (x y : T) := f x ⊑ f y.
+
+Lemma can_apprP : Po.axioms can_appr.
+Proof.
+rewrite /can_appr; split.
+- move=> x; reflexivity.
+- move=> x y z; exact: transitivity.
+- move=> x y xy yx; apply: (can_inj fK).
+  exact: appr_anti xy yx.
+Qed.
+
+Definition CanPoMixin := PoMixin can_apprP.
+
+End CanPo.
+
 Section DFunPo.
 
 Variables (I : Type) (T_ : I -> poType).
@@ -572,6 +624,42 @@ Canonical mono_poType (T S : poType) :=
   Eval hnf in PoType (mono T S) (mono_poMixin T S).
 Canonical mono_subPoType (T S : poType) :=
   Eval hnf in [subPoType of mono T S].
+
+Section ProdPo.
+
+Variables T S : poType.
+
+Definition prod_appr (x y : T * S) :=
+  x.1 ⊑ y.1 /\ x.2 ⊑ y.2.
+
+Lemma prod_apprP : Po.axioms prod_appr.
+Proof.
+rewrite /prod_appr; split.
+- case=> x y /=; split; reflexivity.
+- by case=> [x1 y1] [x2 y2] [x3 y3] /= [xy1 xy2] [yz1 yz2]; split;
+  [apply: transitivity xy1 yz1|apply: transitivity xy2 yz2].
+- case=> [x1 y1] [x2 y2] /= [xy1 xy2] [yx1 yx2].
+  by rewrite (appr_anti xy1 yx1) (appr_anti xy2 yx2).
+Qed.
+
+Definition prod_poMixin := PoMixin prod_apprP.
+Canonical prod_poType := Eval hnf in PoType (T * S) prod_poMixin.
+
+Lemma monotone_fst : monotone (@fst T S).
+Proof. by case=> [??] [??] []. Qed.
+
+Definition mono_fst : mono _ _ :=
+  Eval hnf in Sub (@fst T S) monotone_fst.
+Canonical mono_fst.
+
+Lemma monotone_snd : monotone (@snd T S).
+Proof. by case=> [??] [??] []. Qed.
+
+Definition mono_snd : mono _ _ :=
+  Eval hnf in Sub (@snd T S) monotone_snd.
+Canonical mono_snd.
+
+End ProdPo.
 
 Lemma nat_apprP : Po.axioms leq.
 Proof.
@@ -639,6 +727,8 @@ Canonical dfun_poChoiceType T (S : T -> poChoiceType) :=
   PoChoiceType (dfun S).
 Canonical sfun_poChoiceType T (S : poChoiceType) :=
   PoChoiceType (sfun T S).
+Canonical prod_poChoiceType (T S : poChoiceType) :=
+  PoChoiceType (T * S).
 
 Section MonotoneChoice.
 
@@ -939,6 +1029,24 @@ End DFunCpo.
 
 Canonical sfun_cpoType (T : Type) (S : cpoType) :=
   Eval hnf in CpoType (sfun T S) (dfun_cpoMixin _).
+
+Section ProdCpo.
+
+Variables T S : cpoType.
+
+Lemma prod_cpoMixin : Cpo.mixin_of (prod_poType T S).
+Proof.
+split=> x.
+have [sup_x1 [ub_x1 least_x1]] := supP (mono_comp (mono_fst _ _) x).
+have [sup_x2 [ub_x2 least_x2]] := supP (mono_comp (mono_snd _ _) x).
+exists (sup_x1, sup_x2); split.
+  by move=> n; split=> /=; [apply: ub_x1|apply: ub_x2].
+case=> y1 y2 ub_y; split; [apply: least_x1|apply: least_x2];
+by move=> n; case: (ub_y n).
+Qed.
+Canonical prod_cpoType := Eval hnf in CpoType (T * S) prod_cpoMixin.
+
+End ProdCpo.
 
 Section MonoCpo.
 
@@ -1401,6 +1509,14 @@ apply: embedding_unique; exact: proj_embP.
 Qed.
 
 End BiLimit.
+
+Record functor := Functor {
+  f_obj      : cpoType -> cpoType;
+  f_mor      : forall T S, proj T S -> proj (f_obj T) (f_obj S);
+  f_mor1     : forall T, f_mor (proj_id T) = proj_id _;
+  f_mor_comp : forall T S R (f : proj S R) (g : proj T S),
+                 f_mor (proj_comp f g) = proj_comp (f_mor f) (f_mor g)
+}.
 
 Section Void.
 
