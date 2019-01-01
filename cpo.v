@@ -51,6 +51,8 @@ Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
   f \o (g \o h) = f \o g \o h.
 Proof. by []. Qed.
 
+Definition const (T S : Type) (x : S) (y : T) := x.
+
 Section Casts.
 
 Variable (T : Type).
@@ -346,6 +348,14 @@ Qed.
 Canonical subsing_choiceType :=
   Eval hnf in ChoiceType subsing subsing_choiceMixin.
 
+Definition botss_def (x : T) := False.
+
+Lemma botss_proof : forall x y : T, botss_def x -> botss_def y -> x = y.
+Proof. by []. Qed.
+
+Definition botss : subsing :=
+  Sub botss_def botss_proof.
+
 Record sing := Sing {
   sing_val :> subsing;
   _        :  exists x, sing_val x
@@ -365,6 +375,8 @@ Lemma singleton_of_inj : injective sing_of.
 Proof. by rewrite /sing_of=> x y /(congr1 val)/subsing_of_inj. Qed.
 
 End Singletons.
+
+Arguments botss {_}.
 
 Lemma choose (T : choiceType) (X : subsing T) :
   (exists x, X x) -> {x : T | X x}.
@@ -518,6 +530,13 @@ Definition mono_cast T (S : T -> poType) (x y : T) (e : x = y) : mono _ _ :=
 
 Canonical mono_cast.
 
+Lemma monotone_const (T S : poType) (x : S) : monotone (@const T S x).
+Proof. by move=> ???; reflexivity. Qed.
+
+Definition mono_const (T S : poType) (x : S) : mono T S :=
+  Eval hnf in Sub (@const T S x) (monotone_const x).
+Canonical mono_const.
+
 Section SubPoType.
 
 Variables (T : poType) (P : T -> Prop).
@@ -661,6 +680,9 @@ Canonical mono_snd.
 
 End ProdPo.
 
+Arguments mono_fst {_ _}.
+Arguments mono_snd {_ _}.
+
 Lemma nat_apprP : Po.axioms leq.
 Proof.
 split.
@@ -780,12 +802,26 @@ split; first by move=> /(_ x erefl) [y' ->].
 by move=> xy x' <-; exists y.
 Qed.
 
+Lemma botssP X : botss ⊑ X.
+Proof. by move=> x []. Qed.
+
 Definition sing_poMixin := [poMixin of sing T by <:].
 Canonical sing_poType := Eval hnf in PoType (sing T) sing_poMixin.
 Canonical sing_subPoType := Eval hnf in [subPoType of sing T].
 Canonical sing_poChoiceType := Eval hnf in PoChoiceType (sing T).
 
 End SubsingPo.
+
+Lemma monotone_mapss (T S : poType) (f : mono T S) : monotone (mapss f).
+Proof.
+move=> X Y XY _ [x Xx ->]; case/(_ _ Xx): XY=> [y Yy xy].
+exists (f y); last exact: (valP f _ _ xy).
+by exists y.
+Qed.
+
+Definition mono_mapss (T S : poType) (f : mono T S) : mono _ _ :=
+  Eval hnf in Sub (mapss f) (@monotone_mapss _ _ f).
+Canonical mono_mapss.
 
 Section Supremum.
 
@@ -1034,19 +1070,45 @@ Section ProdCpo.
 
 Variables T S : cpoType.
 
-Lemma prod_cpoMixin : Cpo.mixin_of (prod_poType T S).
+Lemma prod_supP (x : mono nat_poType (prod_poType T S)) :
+  sup x (val (supP (mono_comp mono_fst x)),
+         val (supP (mono_comp mono_snd x))).
 Proof.
-split=> x.
-have [sup_x1 [ub_x1 least_x1]] := supP (mono_comp (mono_fst _ _) x).
-have [sup_x2 [ub_x2 least_x2]] := supP (mono_comp (mono_snd _ _) x).
-exists (sup_x1, sup_x2); split.
+case: (supP (mono_comp mono_fst x)) => [sup_x1 [ub_x1 least_x1]].
+case: (supP (mono_comp mono_snd x)) => [sup_x2 [ub_x2 least_x2]].
+split.
   by move=> n; split=> /=; [apply: ub_x1|apply: ub_x2].
 case=> y1 y2 ub_y; split; [apply: least_x1|apply: least_x2];
 by move=> n; case: (ub_y n).
 Qed.
+
+Lemma prod_cpoMixin : Cpo.mixin_of (prod_poType T S).
+Proof. split=> x; eexists; exact: prod_supP. Qed.
 Canonical prod_cpoType := Eval hnf in CpoType (T * S) prod_cpoMixin.
 
+Lemma prod_supE (x : mono nat_poType prod_cpoType) :
+  val (supP x) = (val (supP (mono_comp mono_fst x)),
+                  val (supP (mono_comp mono_snd x))).
+Proof.
+apply: sup_unique; first exact: valP.
+exact: prod_supP.
+Qed.
+
 End ProdCpo.
+
+Definition mapp (T1 S1 T2 S2 : Type) (f1 : T1 -> S1) (f2 : T2 -> S2) :=
+  fun x : T1 * T2 => (f1 x.1, f2 x.2).
+
+Lemma monotone_mapp (T1 S1 T2 S2 : poType) (f1 : mono T1 S1) (f2 : mono T2 S2) :
+  monotone (mapp f1 f2).
+Proof.
+by case=> [x1 y1] [x2 y2] [/= x12 y12]; split;
+[apply: (valP f1 _ _ x12)|apply: (valP f2 _ _ y12)].
+Qed.
+
+Definition mono_mapp (T1 S1 T2 S2 : poType) (f1 : mono T1 S1) (f2 : mono T2 S2) : mono _ _ :=
+  Eval hnf in Sub (mapp f1 f2) (monotone_mapp f1 f2).
+Canonical mono_mapp.
 
 Section MonoCpo.
 
@@ -1182,6 +1244,15 @@ move=> cont_f x; have [ub_x least_x] := cont_f x; split.
 move=> y ub_y; move: (least_x (val y)); rewrite /= -appr_val.
 by apply=> n; move: (ub_y n); rewrite /= -appr_val.
 Qed.
+
+Lemma continuous_const (T S : cpoType) (x : S) : continuous (@const T S x).
+Proof.
+move=> y; split; first by move=> n; reflexivity.
+by move=> z ub_z; apply: (ub_z 0).
+Qed.
+
+Definition cont_const (T S : cpoType) (x : S) : cont T S :=
+  Eval hnf in Sub (@mono_const T S x) (continuous_const x).
 
 Section SubsingCpo.
 
@@ -1510,14 +1581,6 @@ Qed.
 
 End BiLimit.
 
-Record functor := Functor {
-  f_obj      : cpoType -> cpoType;
-  f_mor      : forall T S, proj T S -> proj (f_obj T) (f_obj S);
-  f_mor1     : forall T, f_mor (proj_id T) = proj_id _;
-  f_mor_comp : forall T S R (f : proj S R) (g : proj T S),
-                 f_mor (proj_comp f g) = proj_comp (f_mor f) (f_mor g)
-}.
-
 Section Void.
 
 Variant void : Set := .
@@ -1569,3 +1632,30 @@ Qed.
 Canonical disc_cpoType := Eval hnf in CpoType disc disc_cpoMixin.
 
 End Disc.
+
+Section Universe.
+
+Let F (T : cpoType) :=
+  Eval hnf in [cpoType of cont T [cpoType of subsing (disc nat * T)]].
+
+Fixpoint chain_obj n : cpoType :=
+  match n with
+  | 0    => [cpoType of subsing void]
+  | n.+1 => F (chain_obj n)
+  end.
+
+Definition chain_mor0_def : cont (chain_obj 1) (chain_obj 0) :=
+  cont_const _ botss.
+
+Lemma chain_mor0_proof : exists e : mono _ _, projection chain_mor0_def e.
+Proof.
+exists (mono_const _ (cont_const _ botss)); split.
+- move=> /= x; rewrite /const; apply: val_inj.
+  by apply: functional_extensionality=> - [].
+- by move=> x; move=> y; rewrite /= /const /=; apply: botssP.
+Qed.
+
+Definition chain_mor0 : proj _ _ :=
+  Eval hnf in Sub chain_mor0_def chain_mor0_proof.
+
+End Universe.
