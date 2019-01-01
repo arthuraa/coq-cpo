@@ -1154,20 +1154,23 @@ split.
 - move=> f_cont x; rewrite -f_cont; exact: valP.
 Qed.
 
-Record cont := Cont {
+Record cont (p : phant (T -> S)) := Cont {
   cont_val :> {mono T -> S};
   _        :  continuous cont_val
 }.
 
-Canonical cont_subType := [subType for cont_val].
-Definition cont_poMixin := [poMixin of cont by <:].
-Canonical cont_poType := Eval hnf in PoType cont cont_poMixin.
-Canonical cont_subPoType := [subPoType of cont].
-Definition cont_choiceMixin := [choiceMixin of cont by <:].
-Canonical cont_choiceType := Eval hnf in ChoiceType cont cont_choiceMixin.
-Canonical cont_poChoiceType := Eval hnf in PoChoiceType cont.
+Local Notation "{ 'cont' R }" := (cont (Phant R))
+  (at level 0, format "{ 'cont'  R }").
 
-Lemma eq_cont (f g : cont) : (forall x, f x = g x) -> f = g.
+Canonical cont_subType p := [subType for @cont_val p].
+Definition cont_poMixin := [poMixin of {cont T -> S} by <:].
+Canonical cont_poType := Eval hnf in PoType {cont T -> S} cont_poMixin.
+Canonical cont_subPoType := [subPoType of {cont T -> S}].
+Definition cont_choiceMixin := [choiceMixin of {cont T -> S} by <:].
+Canonical cont_choiceType := Eval hnf in ChoiceType {cont T -> S} cont_choiceMixin.
+Canonical cont_poChoiceType := Eval hnf in PoChoiceType {cont T -> S}.
+
+Lemma eq_cont (f g : {cont T -> S}) : (forall x, f x = g x) -> f = g.
 Proof.
 move=> e; do 2![apply: val_inj].
 exact: functional_extensionality e.
@@ -1201,10 +1204,15 @@ move=> n /=; exact: sup_fP.
 Qed.
 
 Canonical cont_subCpoType := SubCpoType cont_sup_clos.
-Definition cont_cpoMixin := [cpoMixin of cont by <:].
-Canonical cont_cpoType := Eval hnf in CpoType cont cont_cpoMixin.
+Definition cont_cpoMixin := [cpoMixin of {cont T -> S} by <:].
+Canonical cont_cpoType := Eval hnf in CpoType {cont T -> S} cont_cpoMixin.
 
 End Continuous.
+
+Local Notation "{ 'cont' R }" := (cont (Phant R))
+  (at level 0, format "{ 'cont'  R }") : type_scope.
+
+Arguments Cont {_ _ _ _}.
 
 Section ContinuousComp.
 
@@ -1218,27 +1226,27 @@ apply/(continuous_mono (mono_comp f g))=> x.
 by rewrite -mono_compA f_cont g_cont.
 Qed.
 
-Definition cont_comp (f : cont S R) (g : cont T S) : cont T R :=
+Definition cont_comp (f : {cont S -> R}) (g : {cont T -> S}) : {cont T -> R} :=
   Sub (mono_comp f g) (continuous_comp (valP f) (valP g)).
 
 Lemma continuous_id : continuous (@id T).
 Proof. move=> x; exact: (valP (supP x)). Qed.
 
-Definition cont_id : cont T T :=
+Definition cont_id : {cont T -> T} :=
   Sub mono_id continuous_id.
 
 End ContinuousComp.
 
 Arguments cont_id {_}.
 
-Lemma cont_compA A B C D (f : cont C D) (g : cont B C) (h : cont A B) :
+Lemma cont_compA (A B C D : cpoType) (f : {cont C -> D}) (g : {cont B -> C}) (h : {cont A -> B}) :
   cont_comp f (cont_comp g h) = cont_comp (cont_comp f g) h.
 Proof. exact/val_inj/mono_compA. Qed.
 
 Lemma continuous_cast T (S : T -> cpoType) x y (e : x = y) : continuous (cast S e).
 Proof. case: y / e=> /=; exact: continuous_id. Qed.
 
-Definition cont_cast T (S : T -> cpoType) x y (e : x = y) : cont _ _ :=
+Definition cont_cast T (S : T -> cpoType) x y (e : x = y) : {cont _ -> _} :=
   Sub (mono_cast S e) (continuous_cast e).
 
 Lemma continuous_valV (T S : cpoType) (P : S -> Prop) (sS : subCpoType P) (f : T -> sS) :
@@ -1256,7 +1264,7 @@ move=> y; split; first by move=> n; reflexivity.
 by move=> z ub_z; apply: (ub_z 0).
 Qed.
 
-Definition cont_const (T S : cpoType) (x : S) : cont T S :=
+Definition cont_const (T S : cpoType) (x : S) : {cont T -> S} :=
   Eval hnf in Sub (@mono_const T S x) (continuous_const x).
 
 Section SubsingCpo.
@@ -1314,7 +1322,7 @@ End SubsingCpo.
 Section InverseLimit.
 
 Variable T : nat -> cpoType.
-Variable p : forall n, cont (T n.+1) (T n).
+Variable p : forall n, {cont T n.+1 -> T n}.
 
 Record invlim := InvLim {
   invlim_val : dfun T;
@@ -1357,7 +1365,7 @@ Definition projection (T S : cpoType) (p : T -> S) (e : S -> T) :=
   cancel e p /\ forall x, e (p x) ⊑ x.
 
 Record proj (T S : cpoType) := Proj {
-  proj_val :> cont T S;
+  proj_val :> {cont T -> S};
   _        :  exists e : {mono S -> T}, projection proj_val e
 }.
 
@@ -1394,7 +1402,7 @@ apply: appr_anti; rewrite projectionA; eauto.
 - rewrite e1P.1; reflexivity.
 Qed.
 
-Lemma proj_emb_ex (T S : cpoType) (p : proj T S) : {e : cont S T | projection p e}.
+Lemma proj_emb_ex (T S : cpoType) (p : proj T S) : {e : {cont S -> T} | projection p e}.
 Proof.
 pose p_proj : subsing _ := Sub (fun e : {mono S -> T} => projection p e) (@embedding_unique _ _ p).
 case: (@choose _ p_proj (valP p))=> /= e pe.
@@ -1518,7 +1526,7 @@ move=> x; apply: dfun_supP=> m /=.
 exact: (valP (cont_comp (down m n) (cont_comp (cont_cast _ (addnC m n)) (down n m)^e))).
 Qed.
 
-Definition cont_inlim n : cont (T n) (invlim_cpoType p) :=
+Definition cont_inlim n : {cont T n -> invlim_cpoType p} :=
   Sub (mono_inlim n) (@continuous_inlim n).
 
 Definition outlim n (x : invlim p) : T n := val x n.
@@ -1566,7 +1574,7 @@ move=> {sup_xP} sup_xP y ub_y.
 by case: sup_xP=> [_ least_x]; apply: least_x.
 Qed.
 
-Definition cont_outlim n : cont (invlim_cpoType p) (T n) :=
+Definition cont_outlim n : {cont invlim_cpoType p -> T n} :=
   Sub (mono_outlim n) (continuous_outlim n).
 
 Lemma proj_outlim_proof n : exists e : {mono _ -> _}, projection (outlim n) e.
@@ -1640,16 +1648,15 @@ End Disc.
 
 Section Universe.
 
-Let F (T : cpoType) :=
-  Eval hnf in [cpoType of cont T [cpoType of subsing (disc nat * T)]].
+Let F (T : cpoType) := {cont T -> subsing (disc nat * T)}.
 
 Fixpoint chain_obj n : cpoType :=
   match n with
   | 0    => [cpoType of subsing void]
-  | n.+1 => F (chain_obj n)
+  | n.+1 => [cpoType of F (chain_obj n)]
   end.
 
-Definition chain_mor0_def : cont (chain_obj 1) (chain_obj 0) :=
+Definition chain_mor0_def : {cont chain_obj 1 -> chain_obj 0} :=
   cont_const _ botss.
 
 Lemma chain_mor0_proof : exists e : {mono _ -> _}, projection chain_mor0_def e.
