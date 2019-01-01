@@ -495,27 +495,32 @@ Lemma monotone_comp (T S R : poType) (f : S -> R) (g : T -> S) :
   monotone f -> monotone g -> monotone (f \o g).
 Proof. by move=> mono_f mono_g x y /mono_g/mono_f. Qed.
 
-Record mono (T S : poType) := Mono {
+Record mono (T S : poType) (p : phant (T -> S)) := Mono {
   mono_val :> sfun T S;
   _        :  monotone mono_val
 }.
 
-Canonical mono_subType (T S : poType) :=
-  [subType for @mono_val T S].
+Arguments Mono {_ _ _ _}.
 
-Definition mono_comp T S R (f : mono S R) (g : mono T S) : mono T R :=
+Canonical mono_subType (T S : poType) p :=
+  [subType for @mono_val T S p].
+
+Notation "{ 'mono' T }" := (mono (Phant T))
+  (at level 0, format "{ 'mono'  T }") : type_scope.
+
+Definition mono_comp (T S R : poType) (f : {mono S -> R}) (g : {mono T -> S}) : {mono T -> R} :=
   Eval hnf in Sub (f \o g) (monotone_comp (valP f) (valP g)).
 
 Canonical mono_comp.
 
-Lemma mono_compA A B C D (f : mono C D) (g : mono B C) (h : mono A B) :
+Lemma mono_compA (A B C D : poType) (f : {mono C -> D}) (g : {mono B -> C}) (h : {mono A -> B}) :
   mono_comp f (mono_comp g h) = mono_comp (mono_comp f g) h.
 Proof. exact/val_inj. Qed.
 
 Lemma monotone_id (T : poType) : monotone (@id T).
 Proof. by []. Qed.
 
-Definition mono_id (T : poType) : mono T T :=
+Definition mono_id (T : poType) : {mono T -> T} :=
   Eval hnf in Sub idfun (@monotone_id T).
 
 Canonical mono_id.
@@ -525,7 +530,7 @@ Arguments mono_id {_}.
 Lemma monotone_cast T (S : T -> poType) (x y : T) (e : x = y) : monotone (cast S e).
 Proof. by case: y / e. Qed.
 
-Definition mono_cast T (S : T -> poType) (x y : T) (e : x = y) : mono _ _ :=
+Definition mono_cast T (S : T -> poType) (x y : T) (e : x = y) : {mono _ -> _} :=
   Eval hnf in Sub (cast S e) (monotone_cast e).
 
 Canonical mono_cast.
@@ -533,7 +538,7 @@ Canonical mono_cast.
 Lemma monotone_const (T S : poType) (x : S) : monotone (@const T S x).
 Proof. by move=> ???; reflexivity. Qed.
 
-Definition mono_const (T S : poType) (x : S) : mono T S :=
+Definition mono_const (T S : poType) (x : S) : {mono T -> S} :=
   Eval hnf in Sub (@const T S x) (monotone_const x).
 Canonical mono_const.
 
@@ -562,7 +567,7 @@ Proof. by rewrite /appr; case: sT x y=> ? ? /= ->. Qed.
 Lemma monotone_val (sT : subPoType) : monotone (@val _ _ sT).
 Proof. by move=> x y; rewrite appr_val. Qed.
 
-Definition mono_val' (sT : subPoType) : mono (subPoType_poType sT) T :=
+Definition mono_val' (sT : subPoType) : {mono sT -> T} :=
   Eval hnf in Sub val (@monotone_val sT).
 
 Canonical mono_val'.
@@ -638,11 +643,11 @@ Canonical sfun_poType (T : Type) (S : poType) :=
   Eval hnf in PoType (sfun T S) (dfun_poMixin _).
 
 Definition mono_poMixin (T S : poType) :=
-  [poMixin of mono T S by <:].
+  [poMixin of {mono T -> S} by <:].
 Canonical mono_poType (T S : poType) :=
-  Eval hnf in PoType (mono T S) (mono_poMixin T S).
+  Eval hnf in PoType {mono T -> S} (mono_poMixin T S).
 Canonical mono_subPoType (T S : poType) :=
-  Eval hnf in [subPoType of mono T S].
+  Eval hnf in [subPoType of {mono T -> S}].
 
 Section ProdPo.
 
@@ -667,14 +672,14 @@ Canonical prod_poType := Eval hnf in PoType (T * S) prod_poMixin.
 Lemma monotone_fst : monotone (@fst T S).
 Proof. by case=> [??] [??] []. Qed.
 
-Definition mono_fst : mono _ _ :=
+Definition mono_fst : {mono _ -> _} :=
   Eval hnf in Sub (@fst T S) monotone_fst.
 Canonical mono_fst.
 
 Lemma monotone_snd : monotone (@snd T S).
 Proof. by case=> [??] [??] []. Qed.
 
-Definition mono_snd : mono _ _ :=
+Definition mono_snd : {mono _ -> _} :=
   Eval hnf in Sub (@snd T S) monotone_snd.
 Canonical mono_snd.
 
@@ -757,11 +762,11 @@ Section MonotoneChoice.
 Variables (T : poType) (S : poChoiceType).
 
 Definition mono_choiceMixin :=
-  [choiceMixin of mono T S by <:].
+  [choiceMixin of {mono T -> S} by <:].
 Canonical mono_choiceType :=
-  Eval hnf in ChoiceType (mono T S) mono_choiceMixin.
+  Eval hnf in ChoiceType {mono T -> S} mono_choiceMixin.
 Canonical mono_poChoiceType :=
-  Eval hnf in PoChoiceType (mono T S).
+  Eval hnf in PoChoiceType {mono T -> S}.
 
 End MonotoneChoice.
 
@@ -812,14 +817,14 @@ Canonical sing_poChoiceType := Eval hnf in PoChoiceType (sing T).
 
 End SubsingPo.
 
-Lemma monotone_mapss (T S : poType) (f : mono T S) : monotone (mapss f).
+Lemma monotone_mapss (T S : poType) (f : {mono T -> S}) : monotone (mapss f).
 Proof.
 move=> X Y XY _ [x Xx ->]; case/(_ _ Xx): XY=> [y Yy xy].
 exists (f y); last exact: (valP f _ _ xy).
 by exists y.
 Qed.
 
-Definition mono_mapss (T S : poType) (f : mono T S) : mono _ _ :=
+Definition mono_mapss (T S : poType) (f : {mono T -> S}) : {mono _ -> _} :=
   Eval hnf in Sub (mapss f) (@monotone_mapss _ _ f).
 Canonical mono_mapss.
 
@@ -896,7 +901,7 @@ Qed.
 Module Cpo.
 
 Variant mixin_of (T : poType) :=
-  Mixin of forall (x : mono _ T), exists sup_x, sup (val x) sup_x.
+  Mixin of forall (x : {mono _ -> T}), exists sup_x, sup (val x) sup_x.
 
 Section ClassDef.
 
@@ -944,13 +949,13 @@ End Cpo.
 
 Export Cpo.Exports.
 
-Notation chain T := (mono nat_poType T) (only parsing).
+Notation chain T := {mono nat -> T} (only parsing).
 
 Section Basics.
 
 Variable T : cpoType.
 
-Lemma appr_sup : forall (x : mono _ T), exists sup_x, sup (val x) sup_x.
+Lemma appr_sup : forall (x : {mono _ -> T}), exists sup_x, sup (val x) sup_x.
 Proof. by case: T=> [? [? []]]. Qed.
 
 Lemma supP (x : chain T) : {sup_x | sup (val x) sup_x}.
@@ -1070,7 +1075,7 @@ Section ProdCpo.
 
 Variables T S : cpoType.
 
-Lemma prod_supP (x : mono nat_poType (prod_poType T S)) :
+Lemma prod_supP (x : chain (T * S)) :
   sup x (val (supP (mono_comp mono_fst x)),
          val (supP (mono_comp mono_snd x))).
 Proof.
@@ -1086,7 +1091,7 @@ Lemma prod_cpoMixin : Cpo.mixin_of (prod_poType T S).
 Proof. split=> x; eexists; exact: prod_supP. Qed.
 Canonical prod_cpoType := Eval hnf in CpoType (T * S) prod_cpoMixin.
 
-Lemma prod_supE (x : mono nat_poType prod_cpoType) :
+Lemma prod_supE (x : {mono nat -> T * S}) :
   val (supP x) = (val (supP (mono_comp mono_fst x)),
                   val (supP (mono_comp mono_snd x))).
 Proof.
@@ -1099,14 +1104,14 @@ End ProdCpo.
 Definition mapp (T1 S1 T2 S2 : Type) (f1 : T1 -> S1) (f2 : T2 -> S2) :=
   fun x : T1 * T2 => (f1 x.1, f2 x.2).
 
-Lemma monotone_mapp (T1 S1 T2 S2 : poType) (f1 : mono T1 S1) (f2 : mono T2 S2) :
+Lemma monotone_mapp (T1 S1 T2 S2 : poType) (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) :
   monotone (mapp f1 f2).
 Proof.
 by case=> [x1 y1] [x2 y2] [/= x12 y12]; split;
 [apply: (valP f1 _ _ x12)|apply: (valP f2 _ _ y12)].
 Qed.
 
-Definition mono_mapp (T1 S1 T2 S2 : poType) (f1 : mono T1 S1) (f2 : mono T2 S2) : mono _ _ :=
+Definition mono_mapp (T1 S1 T2 S2 : poType) (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) : {mono _ -> _} :=
   Eval hnf in Sub (mapp f1 f2) (monotone_mapp f1 f2).
 Canonical mono_mapp.
 
@@ -1126,8 +1131,8 @@ by apply: transitivity ub_y; apply: (valP (f n)) xy.
 Qed.
 
 Canonical mono_subCpoType := Eval hnf in SubCpoType mono_sup_clos.
-Definition mono_cpoMixin := [cpoMixin of mono T S by <:].
-Canonical mono_cpoType := Eval hnf in CpoType (mono T S) mono_cpoMixin.
+Definition mono_cpoMixin := [cpoMixin of {mono T -> S} by <:].
+Canonical mono_cpoType := Eval hnf in CpoType {mono T -> S} mono_cpoMixin.
 
 End MonoCpo.
 
@@ -1139,7 +1144,7 @@ Definition continuous (f : T -> S) :=
   forall (x : chain T),
   sup (f \o x) (f (val (supP x))).
 
-Lemma continuous_mono (f : mono T S) :
+Lemma continuous_mono (f : {mono T -> S}) :
   continuous f <->
   forall x : chain T,
     val (supP (mono_comp f x)) = f (val (supP x)).
@@ -1150,7 +1155,7 @@ split.
 Qed.
 
 Record cont := Cont {
-  cont_val :> mono T S;
+  cont_val :> {mono T -> S};
   _        :  continuous cont_val
 }.
 
@@ -1205,7 +1210,7 @@ Section ContinuousComp.
 
 Variables (T S R : cpoType).
 
-Lemma continuous_comp (f : mono S R) (g : mono T S) :
+Lemma continuous_comp (f : {mono S -> R}) (g : {mono T -> S}) :
   continuous f -> continuous g -> continuous (f \o g).
 Proof.
 move=> /continuous_mono f_cont /continuous_mono g_cont.
@@ -1353,25 +1358,25 @@ Definition projection (T S : cpoType) (p : T -> S) (e : S -> T) :=
 
 Record proj (T S : cpoType) := Proj {
   proj_val :> cont T S;
-  _        :  exists e : mono S T, projection proj_val e
+  _        :  exists e : {mono S -> T}, projection proj_val e
 }.
 
 Canonical proj_subType (T S : cpoType) := [subType for @proj_val T S].
 Definition proj_choiceMixin T S := [choiceMixin of proj T S by <:].
 Canonical proj_choiceType T S := Eval hnf in ChoiceType (proj T S) (proj_choiceMixin T S).
 
-Lemma projectionA (T S : cpoType) (p : mono T S) (e : mono S T) x y :
+Lemma projectionA (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
   projection p e -> e x ⊑ y <-> x ⊑ p y.
 Proof.
 case=> eK pD; split; first by move=> /(valP p) /=; rewrite eK.
 by move=> /(valP e) /= H; apply: transitivity H (pD _).
 Qed.
 
-Lemma embedding_iso (T S : cpoType) (p : mono T S) (e : mono S T) x y :
+Lemma embedding_iso (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
   projection p e -> e x ⊑ e y -> x ⊑ y.
 Proof. by case=> eK _ /(valP p); rewrite /= !eK. Qed.
 
-Lemma embedding_cont (T S : cpoType) (p : mono T S) (e : mono S T) :
+Lemma embedding_cont (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) :
   projection p e -> continuous e.
 Proof.
 move=> pe x; case: (supP x)=> [sup_x [/= ub_x least_x]]; split.
@@ -1380,7 +1385,7 @@ move=> y ub_y; apply/(projectionA _ _ pe); apply: least_x.
 by move=> n; apply/(projectionA _ _ pe); apply: ub_y.
 Qed.
 
-Lemma embedding_unique (T S : cpoType) (p : mono T S) (e1 e2 : mono S T) :
+Lemma embedding_unique (T S : cpoType) (p : {mono T -> S}) (e1 e2 : {mono S -> T}) :
   projection p e1 -> projection p e2 -> e1 = e2.
 Proof.
 move=> e1P e2P; apply: val_inj; apply: functional_extensionality=> x /=.
@@ -1391,7 +1396,7 @@ Qed.
 
 Lemma proj_emb_ex (T S : cpoType) (p : proj T S) : {e : cont S T | projection p e}.
 Proof.
-pose p_proj : subsing _ := Sub (fun e : mono S T => projection p e) (@embedding_unique _ _ p).
+pose p_proj : subsing _ := Sub (fun e : {mono S -> T} => projection p e) (@embedding_unique _ _ p).
 case: (@choose _ p_proj (valP p))=> /= e pe.
 have e_cont := embedding_cont pe.
 by exists (Cont e_cont).
@@ -1417,7 +1422,7 @@ Proof. by apply: projectionA; apply: proj_embP. Qed.
 Lemma projection_id : projection (@id T) id.
 Proof. by split=> x; reflexivity. Qed.
 
-Lemma proj_id_proof : exists e : mono T T, projection id e.
+Lemma proj_id_proof : exists e : {mono T -> T}, projection id e.
 Proof. exists cont_id; exact: projection_id. Qed.
 
 Definition proj_id : proj T T := Sub cont_id proj_id_proof.
@@ -1429,8 +1434,8 @@ apply: val_inj.
 apply: embedding_unique H _; apply: projection_id.
 Qed.
 
-Lemma projection_comp (p1 : mono S R) (e1 : mono R S)
-                      (p2 : mono T S) (e2 : mono S T) :
+Lemma projection_comp (p1 : {mono S -> R}) (e1 : {mono R -> S})
+                      (p2 : {mono T -> S}) (e2 : {mono S -> T}) :
   projection p1 e1 -> projection p2 e2 -> projection (p1 \o p2) (e2 \o e1).
 Proof.
 move=> [e1K p1D] [e2K p2D]; split; first by apply: can_comp.
@@ -1440,7 +1445,7 @@ apply: transitivity H _; apply: p2D.
 Qed.
 
 Lemma proj_comp_proof (p1 : proj S R) (p2 : proj T S) :
-  exists e : mono R T, projection (mono_comp p1 p2) e.
+  exists e : {mono R -> T}, projection (mono_comp p1 p2) e.
 Proof.
 by exists (cont_comp p2^e p1^e); apply: projection_comp; apply: proj_embP.
 Qed.
@@ -1501,7 +1506,7 @@ move: ((down n m)^e x) ((down n m)^e y)=> {x y xy}.
 by case: (n + m) / (addnC _ _).
 Qed.
 
-Definition mono_inlim n : mono (T n) (invlim_poType p) :=
+Definition mono_inlim n : {mono T n -> invlim_poType p} :=
   Sub (@inlim n) (@monotone_inlim n).
 
 Lemma continuous_inlim n : continuous (@inlim n).
@@ -1548,7 +1553,7 @@ Qed.
 Lemma monotone_outlim n : monotone (outlim n).
 Proof. by move=> x y; rewrite appr_val => /(_ n). Qed.
 
-Definition mono_outlim n : mono (invlim_poType p) (T n) :=
+Definition mono_outlim n : {mono invlim_poType p -> T n} :=
   Sub (outlim n) (monotone_outlim n).
 
 Lemma continuous_outlim n : continuous (outlim n).
@@ -1564,7 +1569,7 @@ Qed.
 Definition cont_outlim n : cont (invlim_cpoType p) (T n) :=
   Sub (mono_outlim n) (continuous_outlim n).
 
-Lemma proj_outlim_proof n : exists e : mono _ _, projection (outlim n) e.
+Lemma proj_outlim_proof n : exists e : {mono _ -> _}, projection (outlim n) e.
 Proof. exists (mono_inlim n); exact: projection_outlim. Qed.
 
 Definition proj_outlim n : proj (invlim_cpoType p) (T n) :=
@@ -1647,7 +1652,7 @@ Fixpoint chain_obj n : cpoType :=
 Definition chain_mor0_def : cont (chain_obj 1) (chain_obj 0) :=
   cont_const _ botss.
 
-Lemma chain_mor0_proof : exists e : mono _ _, projection chain_mor0_def e.
+Lemma chain_mor0_proof : exists e : {mono _ -> _}, projection chain_mor0_def e.
 Proof.
 exists (mono_const _ (cont_const _ botss)); split.
 - move=> /= x; rewrite /const; apply: val_inj.
