@@ -835,11 +835,11 @@ Variable T : poType.
 Definition ub (x : nat -> T) (ub_x : T) :=
   forall n, x n ⊑ ub_x.
 
-Definition sup (x : nat -> T) (sup_x : T) :=
+Definition supremum (x : nat -> T) (sup_x : T) :=
   ub x sup_x /\ forall ub_x, ub x ub_x -> sup_x ⊑ ub_x.
 
-Lemma sup_unique (x : nat -> T) sup_x1 sup_x2 :
-  sup x sup_x1 -> sup x sup_x2 -> sup_x1 = sup_x2.
+Lemma supremum_unique (x : nat -> T) sup_x1 sup_x2 :
+  supremum x sup_x1 -> supremum x sup_x2 -> sup_x1 = sup_x2.
 Proof.
 move=> [ub_x1 least_x1] [ub_x2 least_x2].
 apply: appr_anti.
@@ -851,8 +851,8 @@ Definition shift (x : nat -> T) n m := x (n + m).
 
 Lemma sup_shift (x : nat -> T) n sup_x :
   monotone x ->
-  sup x sup_x ->
-  sup (shift x n) sup_x.
+  supremum x sup_x ->
+  supremum (shift x n) sup_x.
 Proof.
 move=> x_mono [ub_x least_x]; split; first by move=> m; apply: ub_x.
 move=> y ub_y; apply: least_x=> p.
@@ -860,17 +860,17 @@ apply: transitivity (x (n + p)) _ _ (ub_y _).
 by apply: x_mono; apply: leq_addl.
 Qed.
 
-Definition osup (x : nat -> T) : subsing T := Sub (sup x) (@sup_unique x).
+Definition osup (x : nat -> T) : subsing T := Sub (supremum x) (@supremum_unique x).
 
-Lemma supC (x : nat -> nat -> T) (x1 x2 : nat -> T) :
-  (forall n, sup (x n) (x1 n)) ->
-  (forall m, sup (x^~ m) (x2 m)) ->
-  sup x1 = sup x2.
+Lemma supremumC (x : nat -> nat -> T) (x1 x2 : nat -> T) :
+  (forall n, supremum (x n) (x1 n)) ->
+  (forall m, supremum (x^~ m) (x2 m)) ->
+  supremum x1 = supremum x2.
 Proof.
-have H: forall x x1 x2, (forall n, sup (x n) (x1 n)) ->
-                        (forall m, sup (x^~ m) (x2 m)) ->
+have H: forall x x1 x2, (forall n, supremum (x n) (x1 n)) ->
+                        (forall m, supremum (x^~ m) (x2 m)) ->
                         forall sup_x,
-                        sup x1 sup_x -> sup x2 sup_x.
+                        supremum x1 sup_x -> supremum x2 sup_x.
   move=> {x x1 x2} x x1 x2 x1P x2P sup_x [ub_x] least_x; split.
   - move=> m; case: (x2P m)=> [ub_x2 least_x2].
     apply: least_x2=> n.
@@ -890,7 +890,7 @@ Qed.
 End Supremum.
 
 Lemma dfun_supP T (S : T -> poType) (f : nat -> dfun_poType S) sup_f :
-  (forall x, sup (f^~ x) (sup_f x)) -> sup f sup_f.
+  (forall x, supremum (f^~ x) (sup_f x)) -> supremum f sup_f.
 Proof.
 move=> sup_fP; split.
 - by move=> n x; case: (sup_fP x)=> ub_x _; apply: ub_x.
@@ -901,7 +901,7 @@ Qed.
 Module Cpo.
 
 Variant mixin_of (T : poType) :=
-  Mixin of forall (x : {mono _ -> T}), exists sup_x, sup (val x) sup_x.
+  Mixin of forall (x : {mono _ -> T}), exists sup_x, supremum (val x) sup_x.
 
 Section ClassDef.
 
@@ -955,19 +955,19 @@ Section Basics.
 
 Variable T : cpoType.
 
-Lemma appr_sup : forall (x : {mono _ -> T}), exists sup_x, sup (val x) sup_x.
+Lemma appr_sup : forall (x : {mono _ -> T}), exists sup_x, supremum (val x) sup_x.
 Proof. by case: T=> [? [? []]]. Qed.
 
-Lemma supP (x : chain T) : {sup_x | sup (val x) sup_x}.
+Lemma supP (x : chain T) : {sup_x | supremum (val x) sup_x}.
 Proof.
 apply/choiceP.
 have [sup_x sup_xP] := appr_sup x.
 exists sup_x; split=> // ?.
-exact: sup_unique.
+exact: supremum_unique.
 Qed.
 
-Lemma supE (x : chain T) sup_x : sup x sup_x -> val (supP x) = sup_x.
-Proof. exact/sup_unique/(valP (supP x)). Qed.
+Lemma supE (x : chain T) sup_x : supremum x sup_x -> val (supP x) = sup_x.
+Proof. exact/supremum_unique/(valP (supP x)). Qed.
 
 End Basics.
 
@@ -977,7 +977,7 @@ Variables (T : cpoType) (P : T -> Prop).
 
 Definition subCpo_axiom (S : subPoType P) :=
   forall (x : chain S) sup_x,
-    sup (val \o x) sup_x -> P sup_x.
+    supremum (val \o x) sup_x -> P sup_x.
 
 Record subCpoType := SubCpoType {
   subCpo_sort :> subPoType P;
@@ -993,7 +993,7 @@ Definition clone_subCpoType (U : Type) :=
 Variable sT : subCpoType.
 
 Lemma subCpo_supP (x : chain sT) (sup_x : sT) :
-  sup x sup_x <-> sup (val \o x) (val sup_x).
+  supremum x sup_x <-> supremum (val \o x) (val sup_x).
 Proof.
 case: (sT) x sup_x=> [sS sSP] /= x sup_x; split=> sup_xP.
 - have [/= vsup_x vsup_xP] := supP (mono_comp (Mono monotone_val) x).
@@ -1001,7 +1001,7 @@ case: (sT) x sup_x=> [sS sSP] /= x sup_x; split=> sup_xP.
   suffices -> : val sup_x = vsup_x by [].
   rewrite -[RHS](SubK sS Pvsup_x); congr val.
   have [ub_x least_x] := vsup_xP.
-  apply: sup_unique sup_xP _; split.
+  apply: supremum_unique sup_xP _; split.
     by move=> n; rewrite appr_val SubK; apply: ub_x.
   move=> y ub_y; rewrite appr_val SubK; apply: least_x.
   move=> n /=; rewrite -appr_val; exact: ub_y.
@@ -1041,7 +1041,7 @@ Section DFunCpo.
 Variables (T : Type) (S : T -> cpoType).
 
 Lemma dfun_supPV (f : chain (dfun_poType S)) :
-  {sup_f | forall x, sup (f^~ x) (sup_f x)}.
+  {sup_f | forall x, supremum (f^~ x) (sup_f x)}.
 Proof.
 have f_mono: forall x, monotone (f^~ x).
   by move=> x n1 n2 n1n2; apply: (valP f n1 n2 n1n2).
@@ -1057,13 +1057,13 @@ Qed.
 Canonical dfun_cpoType := Eval hnf in CpoType (dfun S) dfun_cpoMixin.
 
 Lemma dfun_sup_pointwise (f : chain dfun_cpoType) sup_f :
-  sup f sup_f ->
-  forall x, sup (f^~ x) (sup_f x).
+  supremum f sup_f ->
+  forall x, supremum (f^~ x) (sup_f x).
 Proof.
 move=> sup_fP.
 have [sup_f' PW] := dfun_supPV f.
 have sup_f'P := dfun_supP PW.
-by rewrite (sup_unique sup_fP sup_f'P).
+by rewrite (supremum_unique sup_fP sup_f'P).
 Qed.
 
 End DFunCpo.
@@ -1076,8 +1076,8 @@ Section ProdCpo.
 Variables T S : cpoType.
 
 Lemma prod_supP (x : chain (T * S)) :
-  sup x (val (supP (mono_comp mono_fst x)),
-         val (supP (mono_comp mono_snd x))).
+  supremum x (val (supP (mono_comp mono_fst x)),
+              val (supP (mono_comp mono_snd x))).
 Proof.
 case: (supP (mono_comp mono_fst x)) => [sup_x1 [ub_x1 least_x1]].
 case: (supP (mono_comp mono_snd x)) => [sup_x2 [ub_x2 least_x2]].
@@ -1095,7 +1095,7 @@ Lemma prod_supE (x : {mono nat -> T * S}) :
   val (supP x) = (val (supP (mono_comp mono_fst x)),
                   val (supP (mono_comp mono_snd x))).
 Proof.
-apply: sup_unique; first exact: valP.
+apply: supremum_unique; first exact: valP.
 exact: prod_supP.
 Qed.
 
@@ -1142,7 +1142,7 @@ Variables T S : cpoType.
 
 Definition continuous (f : T -> S) :=
   forall (x : chain T),
-  sup (f \o x) (f (val (supP x))).
+  supremum (f \o x) (f (val (supP x))).
 
 Lemma continuous_mono (f : {mono T -> S}) :
   continuous f <->
@@ -1150,7 +1150,7 @@ Lemma continuous_mono (f : {mono T -> S}) :
     val (supP (mono_comp f x)) = f (val (supP x)).
 Proof.
 split.
-- move=> f_cont x; apply: sup_unique (f_cont x); exact: valP.
+- move=> f_cont x; apply: supremum_unique (f_cont x); exact: valP.
 - move=> f_cont x; rewrite -f_cont; exact: valP.
 Qed.
 
@@ -1186,7 +1186,7 @@ move/dfun_sup_pointwise=> sup_fP x.
 have fnx_mono : forall n, monotone (f n \o x).
   by move=> n; apply: monotone_comp (valP (val _)) (valP _).
 pose g n := val (supP (Mono (fnx_mono n))).
-have gP  :  forall n, sup (f n \o x) (g n).
+have gP  :  forall n, supremum (f n \o x) (g n).
   by move=> n; apply: valP.
 have g_mono : monotone g.
   move=> n1 n2 n1n2.
@@ -1194,12 +1194,12 @@ have g_mono : monotone g.
   apply: least_n1=> m; apply: transitivity (f n2 (x m)) _ _ (ub_n2 m).
   exact: (valP f).
 have -> : sup_f (val (supP x)) = val (supP (Mono g_mono)).
-  apply: sup_unique (sup_fP (val (supP x))) _.
+  apply: supremum_unique (sup_fP (val (supP x))) _.
   move: (valP (supP (Mono g_mono)))=> /=.
   rewrite {1}(_ : g = f^~ (sval (supP x))) //.
   apply: functional_extensionality=> n.
-  exact: sup_unique (gP n) (valP (f n) x).
-rewrite (@supC _ _ (sup_f \o x) g _ gP); first exact: valP.
+  exact: supremum_unique (gP n) (valP (f n) x).
+rewrite (@supremumC _ _ (sup_f \o x) g _ gP); first exact: valP.
 move=> n /=; exact: sup_fP.
 Qed.
 
@@ -1277,12 +1277,12 @@ split=> X.
 pose sup_X x :=
   exists (y : chain T) (n : nat),
   (forall m, X (n + m) = subsing_of (y m)) /\
-  sup y x.
+  supremum y x.
 have sup_XP : forall x1 x2, sup_X x1 -> sup_X x2 -> x1 = x2.
   move=> x1 x2 [y1 [n1 [y1X x1P]]] [y2 [n2 [y2X x2P]]].
   pose y := shift y1 (n2 - n1).
-  have {x1P} x1P : sup y x1 by exact: sup_shift (valP y1) _.
-  suffices: sup y x2 by apply: sup_unique x1P.
+  have {x1P} x1P : supremum y x1 by exact: sup_shift (valP y1) _.
+  suffices: supremum y x2 by apply: supremum_unique x1P.
   have -> : y = shift y2 (n1 - n2).
     apply: functional_extensionality=> n.
     rewrite /y /shift.
