@@ -1368,87 +1368,87 @@ Canonical invlim_cpoType := Eval hnf in CpoType invlim invlim_cpoMixin.
 
 End InverseLimit.
 
-Section Projections.
+Section Retractions.
 
-Definition projection (T S : cpoType) (p : T -> S) (e : S -> T) :=
+Definition retraction (T S : cpoType) (p : T -> S) (e : S -> T) :=
   cancel e p /\ forall x, e (p x) ⊑ x.
 
-Record proj (T S : cpoType) (p : phant (T -> S)) := Proj {
-  proj_val : {cont T -> S} * {mono S -> T};
-  _        : projection proj_val.1 proj_val.2
+Record retr (T S : cpoType) (p : phant (T -> S)) := Retr {
+  retr_val : {cont T -> S} * {mono S -> T};
+  _        : retraction retr_val.1 retr_val.2
 }.
 
-Canonical proj_subType (T S : cpoType) p :=
-  [subType for @proj_val T S p].
-Notation "{ 'proj' T }" := (proj (Phant T))
-  (at level 0, format "{ 'proj'  T }") : type_scope.
-Definition proj_choiceMixin (T S : cpoType) :=
-  [choiceMixin of {proj T -> S} by <:].
-Canonical proj_choiceType (T S : cpoType) :=
-  Eval hnf in ChoiceType {proj T -> S} (proj_choiceMixin T S).
+Canonical retr_subType (T S : cpoType) p :=
+  [subType for @retr_val T S p].
+Notation "{ 'retr' T }" := (retr (Phant T))
+  (at level 0, format "{ 'retr'  T }") : type_scope.
+Definition retr_choiceMixin (T S : cpoType) :=
+  [choiceMixin of {retr T -> S} by <:].
+Canonical retr_choiceType (T S : cpoType) :=
+  Eval hnf in ChoiceType {retr T -> S} (retr_choiceMixin T S).
 
-Lemma projectionA (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
-  projection p e -> e x ⊑ y <-> x ⊑ p y.
+Lemma retractionA (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
+  retraction p e -> e x ⊑ y <-> x ⊑ p y.
 Proof.
 case=> eK pD; split; first by move=> /(valP p) /=; rewrite eK.
 by move=> /(valP e) /= H; apply: transitivity H (pD _).
 Qed.
 
 Lemma embedding_iso (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
-  projection p e -> e x ⊑ e y -> x ⊑ y.
+  retraction p e -> e x ⊑ e y -> x ⊑ y.
 Proof. by case=> eK _ /(valP p); rewrite /= !eK. Qed.
 
 Lemma embedding_cont (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) :
-  projection p e -> continuous e.
+  retraction p e -> continuous e.
 Proof.
 move=> pe x; case: (supP x)=> [/= ub_x least_x]; apply: sup_unique; split.
   by move=> n /=; apply: (valP e).
-move=> y ub_y; apply/(projectionA _ _ pe); apply: least_x.
-by move=> n; apply/(projectionA _ _ pe); apply: ub_y.
+move=> y ub_y; apply/(retractionA _ _ pe); apply: least_x.
+by move=> n; apply/(retractionA _ _ pe); apply: ub_y.
 Qed.
 
 Lemma embedding_unique (T S : cpoType) (p : {mono T -> S}) (e1 e2 : {mono S -> T}) :
-  projection p e1 -> projection p e2 -> e1 = e2.
+  retraction p e1 -> retraction p e2 -> e1 = e2.
 Proof.
 move=> e1P e2P; apply: val_inj; apply: functional_extensionality=> x /=.
-apply: appr_anti; rewrite projectionA; eauto.
+apply: appr_anti; rewrite retractionA; eauto.
 - rewrite e2P.1; reflexivity.
 - rewrite e1P.1; reflexivity.
 Qed.
 
-Definition proj_proj (T S : cpoType) (P : phant (T -> S)) (p : proj P) : {cont T -> S} :=
+Definition retr_retr (T S : cpoType) (P : phant (T -> S)) (p : retr P) : {cont T -> S} :=
   (val p).1.
 
-Coercion proj_proj : proj >-> cont.
+Coercion retr_retr : retr >-> cont.
 
-Definition proj_emb (T S : cpoType) (p : {proj T -> S}) : {cont S -> T} :=
+Definition retr_emb (T S : cpoType) (p : {retr T -> S}) : {cont S -> T} :=
   Sub (val p).2 (embedding_cont (valP p)).
 
-Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e").
+Notation "p '^e'" := (retr_emb p) (at level 9, format "p ^e").
 
-Lemma projP (T S : cpoType) (p : {proj T -> S}) : projection p p^e.
+Lemma retrP (T S : cpoType) (p : {retr T -> S}) : retraction p p^e.
 Proof. exact: (valP p). Qed.
 
 Variables T S R : cpoType.
 
-Lemma embK (p : {proj T -> S}) : cancel p^e p.
-Proof. by case: (projP p). Qed.
+Lemma embK (p : {retr T -> S}) : cancel p^e p.
+Proof. by case: (retrP p). Qed.
 
-Lemma projD (p : {proj T -> S}) x : p^e (p x) ⊑ x.
-Proof. by case: (projP p). Qed.
+Lemma retrD (p : {retr T -> S}) x : p^e (p x) ⊑ x.
+Proof. by case: (retrP p). Qed.
 
-Lemma projA (p : {proj T -> S}) x y : p^e x ⊑ y <-> x ⊑ p y.
-Proof. by apply: projectionA; apply: projP. Qed.
+Lemma retrA (p : {retr T -> S}) x y : p^e x ⊑ y <-> x ⊑ p y.
+Proof. by apply: retractionA; apply: retrP. Qed.
 
-Lemma projection_id : projection (@id T) id.
+Lemma retraction_id : retraction (@id T) id.
 Proof. by split=> x; reflexivity. Qed.
 
-Definition proj_id : {proj T -> T} :=
-  Eval hnf in Sub (cont_id, mono_id) projection_id.
+Definition retr_id : {retr T -> T} :=
+  Eval hnf in Sub (cont_id, mono_id) retraction_id.
 
-Lemma projection_comp (p1 : {mono S -> R}) (e1 : {mono R -> S})
+Lemma retraction_comp (p1 : {mono S -> R}) (e1 : {mono R -> S})
                       (p2 : {mono T -> S}) (e2 : {mono S -> T}) :
-  projection p1 e1 -> projection p2 e2 -> projection (p1 \o p2) (e2 \o e1).
+  retraction p1 e1 -> retraction p2 e2 -> retraction (p1 \o p2) (e2 \o e1).
 Proof.
 move=> [e1K p1D] [e2K p2D]; split; first by apply: can_comp.
 move=> x /=.
@@ -1456,24 +1456,24 @@ have /= H := valP e2 _ _ (p1D (p2 x)).
 apply: transitivity H _; apply: p2D.
 Qed.
 
-Definition proj_comp (p1 : {proj S -> R}) (p2 : {proj T -> S}) : {proj T -> R} :=
+Definition retr_comp (p1 : {retr S -> R}) (p2 : {retr T -> S}) : {retr T -> R} :=
   Eval hnf in Sub (cont_comp p1 p2, mono_comp p2^e p1^e)
-                  (projection_comp (projP p1) (projP p2)).
+                  (retraction_comp (retrP p1) (retrP p2)).
 
-End Projections.
+End Retractions.
 
-Notation "{ 'proj' T }" := (proj (Phant T))
-  (at level 0, format "{ 'proj'  T }") : type_scope.
-Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e") : cpo_scope.
+Notation "{ 'retr' T }" := (retr (Phant T))
+  (at level 0, format "{ 'retr'  T }") : type_scope.
+Notation "p '^e'" := (retr_emb p) (at level 9, format "p ^e") : cpo_scope.
 
 Section BiLimit.
 
-Variables (T : nat -> cpoType) (p : forall n, {proj T n.+1 -> T n}).
+Variables (T : nat -> cpoType) (p : forall n, {retr T n.+1 -> T n}).
 
-Fixpoint down n m : {proj T (m + n) -> T n} :=
+Fixpoint down n m : {retr T (m + n) -> T n} :=
   match m with
-  | 0    => @proj_id _
-  | m.+1 => proj_comp (down n m) (p (m + n))
+  | 0    => @retr_id _
+  | m.+1 => retr_comp (down n m) (p (m + n))
   end.
 
 Lemma downSn n m x : p n (down n.+1 m x) = down n m.+1 (cast T (addnS _ _) x).
@@ -1501,7 +1501,7 @@ Definition inlim n x : invlim p :=
 Lemma monotone_inlim n : monotone (@inlim n).
 Proof.
 move=> x y xy m; rewrite /= /inlim_def /=.
-apply: (valP (val (proj_proj (down m n)))).
+apply: (valP (val (retr_retr (down m n)))).
 move: (valP (val (down n m)^e) _ _ xy) => /=.
 move: ((down n m)^e x) ((down n m)^e y)=> {x y xy}.
 by case: (n + m) / (addnC _ _).
@@ -1515,7 +1515,7 @@ Proof.
 apply: continuous_valV; move=> x /=.
 apply: functional_extensionality_dep=> m.
 rewrite /inlim_def -(valP (down n m)^e) -(valP (cont_cast _ (addnC m n))).
-rewrite -(valP (proj_proj (down m n))) /= {1}/sup /= /dfun_sup.
+rewrite -(valP (retr_retr (down m n))) /= {1}/sup /= /dfun_sup.
 by congr sup; apply: val_inj.
 Qed.
 
@@ -1528,7 +1528,7 @@ Lemma up_outlim n m x : (down n m)^e (outlim _ x) ⊑ outlim _ x.
 Proof.
 elim: m=> [|m IH /=]; first by reflexivity.
 apply: transitivity (valP (val (p (m + n))^e) _ _ IH) _.
-rewrite /outlim (valP x) /=; exact: projD.
+rewrite /outlim (valP x) /=; exact: retrD.
 Qed.
 
 Lemma down_outlim n m x : down n m (outlim _ x) = outlim _ x.
@@ -1536,13 +1536,13 @@ Proof.
 elim: m=> [//|m IH /=]; by rewrite -(valP x (m + n)) -IH.
 Qed.
 
-Lemma projection_outlim n : projection (outlim n) (@inlim n).
+Lemma retraction_outlim n : retraction (outlim n) (@inlim n).
 Proof.
 split.
   by move=> x; rewrite /inlim /inlim_def /outlim /= eq_axiomK /= embK.
 move=> x; rewrite appr_val /=; move=> m; rewrite /inlim_def.
 apply: (@transitivity _ _ _ _ (down m n (cast T (addnC m n) (outlim _ x)))).
-  apply: (valP (val (proj_proj (down m n)))).
+  apply: (valP (val (retr_retr (down m n)))).
   apply: monotone_cast; exact: up_outlim.
 rewrite (eq_irrelevance _ _ : addnC m n = esym (addnC n m)).
 move: (m + n) (addnC n m)=> k ek.
@@ -1565,16 +1565,16 @@ Qed.
 Definition cont_outlim n : {cont invlim p -> T n} :=
   Sub (mono_outlim n) (continuous_outlim n).
 
-Definition proj_outlim n : {proj invlim p -> T n} :=
-  Sub (cont_outlim n, mono_inlim n) (projection_outlim n).
+Definition retr_outlim n : {retr invlim p -> T n} :=
+  Sub (cont_outlim n, mono_inlim n) (retraction_outlim n).
 
-Lemma emb_outlim n : (proj_outlim n)^e = cont_inlim n.
+Lemma emb_outlim n : (retr_outlim n)^e = cont_inlim n.
 Proof.
-apply: val_inj; move: (projection_outlim n)=> /=.
+apply: val_inj; move: (retraction_outlim n)=> /=.
 (* FIXME: Why can't this be solved by unification? *)
 rewrite -[@inlim n]/(mono_val (mono_inlim n)).
-rewrite -[outlim n]/(mono_val (proj_outlim n)).
-apply: embedding_unique; exact: projP.
+rewrite -[outlim n]/(mono_val (retr_outlim n)).
+apply: embedding_unique; exact: retrP.
 Qed.
 
 End BiLimit.
@@ -1645,15 +1645,19 @@ Fixpoint chain_obj n : cpoType :=
   | n.+1 => [cpoType of F (chain_obj n)]
   end.
 
-Definition chain_mor0_def : {cont chain_obj 1 -> chain_obj 0} :=
-  cont_const _ botss.
+Definition chain_mor0_def :
+  {cont chain_obj 1 -> chain_obj 0} * {mono chain_obj 0 -> chain_obj 1} :=
+  (cont_const _ botss, mono_const _ (cont_const _ botss)).
 
-Lemma chain_mor0_proof : exists e : {mono _ -> _}, projection chain_mor0_def e.
+Lemma chain_mor0_proof : retraction chain_mor0_def.1 chain_mor0_def.2.
 Proof.
-exists (mono_const _ (cont_const _ botss)); split.
+split.
 - move=> /= x; rewrite /const; apply: val_inj.
   by apply: functional_extensionality=> - [].
 - by move=> x; move=> y; rewrite /= /const /=; apply: botssP.
 Qed.
+
+Definition chain_mor0 : {retr chain_obj 1 -> chain_obj 0} :=
+  Sub chain_mor0_def chain_mor0_proof.
 
 End Universe.
