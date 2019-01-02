@@ -1373,14 +1373,19 @@ Section Projections.
 Definition projection (T S : cpoType) (p : T -> S) (e : S -> T) :=
   cancel e p /\ forall x, e (p x) ⊑ x.
 
-Record proj (T S : cpoType) := Proj {
+Record proj (T S : cpoType) (p : phant (T -> S)) := Proj {
   proj_val : {cont T -> S} * {mono S -> T};
   _        : projection proj_val.1 proj_val.2
 }.
 
-Canonical proj_subType (T S : cpoType) := [subType for @proj_val T S].
-Definition proj_choiceMixin T S := [choiceMixin of proj T S by <:].
-Canonical proj_choiceType T S := Eval hnf in ChoiceType (proj T S) (proj_choiceMixin T S).
+Canonical proj_subType (T S : cpoType) p :=
+  [subType for @proj_val T S p].
+Notation "{ 'proj' T }" := (proj (Phant T))
+  (at level 0, format "{ 'proj'  T }") : type_scope.
+Definition proj_choiceMixin (T S : cpoType) :=
+  [choiceMixin of {proj T -> S} by <:].
+Canonical proj_choiceType (T S : cpoType) :=
+  Eval hnf in ChoiceType {proj T -> S} (proj_choiceMixin T S).
 
 Lemma projectionA (T S : cpoType) (p : {mono T -> S}) (e : {mono S -> T}) x y :
   projection p e -> e x ⊑ y <-> x ⊑ p y.
@@ -1411,34 +1416,34 @@ apply: appr_anti; rewrite projectionA; eauto.
 - rewrite e1P.1; reflexivity.
 Qed.
 
-Definition proj_proj (T S : cpoType) (p : proj T S) : {cont T -> S} :=
+Definition proj_proj (T S : cpoType) (P : phant (T -> S)) (p : proj P) : {cont T -> S} :=
   (val p).1.
 
 Coercion proj_proj : proj >-> cont.
 
-Definition proj_emb (T S : cpoType) (p : proj T S) : {cont S -> T} :=
+Definition proj_emb (T S : cpoType) (p : {proj T -> S}) : {cont S -> T} :=
   Sub (val p).2 (embedding_cont (valP p)).
 
 Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e").
 
-Lemma projP (T S : cpoType) (p : proj T S) : projection p p^e.
+Lemma projP (T S : cpoType) (p : {proj T -> S}) : projection p p^e.
 Proof. exact: (valP p). Qed.
 
 Variables T S R : cpoType.
 
-Lemma embK (p : proj T S) : cancel p^e p.
+Lemma embK (p : {proj T -> S}) : cancel p^e p.
 Proof. by case: (projP p). Qed.
 
-Lemma projD (p : proj T S) x : p^e (p x) ⊑ x.
+Lemma projD (p : {proj T -> S}) x : p^e (p x) ⊑ x.
 Proof. by case: (projP p). Qed.
 
-Lemma projA (p : proj T S) x y : p^e x ⊑ y <-> x ⊑ p y.
+Lemma projA (p : {proj T -> S}) x y : p^e x ⊑ y <-> x ⊑ p y.
 Proof. by apply: projectionA; apply: projP. Qed.
 
 Lemma projection_id : projection (@id T) id.
 Proof. by split=> x; reflexivity. Qed.
 
-Definition proj_id : proj T T :=
+Definition proj_id : {proj T -> T} :=
   Eval hnf in Sub (cont_id, mono_id) projection_id.
 
 Lemma projection_comp (p1 : {mono S -> R}) (e1 : {mono R -> S})
@@ -1451,19 +1456,21 @@ have /= H := valP e2 _ _ (p1D (p2 x)).
 apply: transitivity H _; apply: p2D.
 Qed.
 
-Definition proj_comp (p1 : proj S R) (p2 : proj T S) : proj T R :=
+Definition proj_comp (p1 : {proj S -> R}) (p2 : {proj T -> S}) : {proj T -> R} :=
   Eval hnf in Sub (cont_comp p1 p2, mono_comp p2^e p1^e)
                   (projection_comp (projP p1) (projP p2)).
 
 End Projections.
 
+Notation "{ 'proj' T }" := (proj (Phant T))
+  (at level 0, format "{ 'proj'  T }") : type_scope.
 Notation "p '^e'" := (proj_emb p) (at level 9, format "p ^e") : cpo_scope.
 
 Section BiLimit.
 
-Variables (T : nat -> cpoType) (p : forall n, proj (T n.+1) (T n)).
+Variables (T : nat -> cpoType) (p : forall n, {proj T n.+1 -> T n}).
 
-Fixpoint down n m : proj (T (m + n)) (T n) :=
+Fixpoint down n m : {proj T (m + n) -> T n} :=
   match m with
   | 0    => @proj_id _
   | m.+1 => proj_comp (down n m) (p (m + n))
@@ -1558,7 +1565,7 @@ Qed.
 Definition cont_outlim n : {cont invlim p -> T n} :=
   Sub (mono_outlim n) (continuous_outlim n).
 
-Definition proj_outlim n : proj (invlim_cpoType p) (T n) :=
+Definition proj_outlim n : {proj invlim p -> T n} :=
   Sub (cont_outlim n, mono_inlim n) (projection_outlim n).
 
 Lemma emb_outlim n : (proj_outlim n)^e = cont_inlim n.
