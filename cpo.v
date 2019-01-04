@@ -1689,6 +1689,27 @@ rewrite (inlim_defEL _ nk) (eq_irrelevance mk (leq_trans mn nk)).
 by rewrite downlD emb_retr_comp.
 Qed.
 
+Lemma leq_proj_id n : proj n ⊑ cont_id.
+Proof. exact: (retrD (retr_outlim n)). Qed.
+
+Lemma monotone_proj : monotone proj.
+Proof.
+move=> /= n m /minn_idPr <-; rewrite -projI=> x /=.
+exact: (monoP (proj m) (leq_proj_id n x)).
+Qed.
+
+Definition mono_proj : {mono nat -> {cont invlim p -> invlim p}} :=
+  Sub proj monotone_proj.
+Canonical mono_proj.
+
+Lemma sup_proj : sup mono_proj = cont_id.
+Proof.
+apply: sup_unique; split; first exact: leq_proj_id.
+move=> /= f ub_f; move=> /= x; move=> /= n.
+move: (ub_f n x n)=> /=.
+by rewrite (inlim_defER _ (leqnn n)) downl0.
+Qed.
+
 End BiLimit.
 
 Section Void.
