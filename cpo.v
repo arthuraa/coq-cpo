@@ -1669,6 +1669,26 @@ Qed.
 Definition proj n : {cont invlim p -> invlim p} :=
   cont_comp (cont_inlim n) (cont_outlim n).
 
+Lemma projI n m : cont_comp (proj n) (proj m) = proj (minn n m).
+Proof.
+apply: eq_cont=> /= x; apply: val_inj.
+rewrite /minn; case: ltnP=> [nm|mn].
+  suffices -> : outlim n (inlim (outlim m x)) = outlim n x by [].
+  by rewrite {1}/outlim /= (inlim_defER _ (ltnW nm)) downl_outlim.
+move: (outlim m x)=> {x} x.
+rewrite /outlim {2}/inlim /= (inlim_defEL _ mn).
+apply: functional_extensionality_dep=> k.
+case: (leqP k m)=> [km|/ltnW mk].
+  rewrite (inlim_defER _ km) (inlim_defER _ (leq_trans km mn)).
+  by rewrite downlD /= embK.
+rewrite (inlim_defEL _ mk); case: (leqP k n)=> [kn|/ltnW nk].
+  rewrite (inlim_defER _ kn).
+  rewrite (eq_irrelevance mn (leq_trans mk kn)) downlD emb_retr_comp /=.
+  by rewrite embK.
+rewrite (inlim_defEL _ nk) (eq_irrelevance mk (leq_trans mn nk)).
+by rewrite downlD emb_retr_comp.
+Qed.
+
 End BiLimit.
 
 Section Void.
