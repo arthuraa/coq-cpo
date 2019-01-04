@@ -1046,7 +1046,7 @@ Notation chain T := {mono nat -> T} (only parsing).
 Definition sup (T : cpoType) (x : {mono nat -> T}) : T :=
   Cpo.sup (Cpo.mixin (Cpo.class T)) x.
 
-Section Basics.
+Section CpoTheory.
 
 Variable T : cpoType.
 
@@ -1062,7 +1062,7 @@ apply: sup_unique; split; first by move=> ?; reflexivity.
 by move=> y /(_ 0).
 Qed.
 
-End Basics.
+End CpoTheory.
 
 Section SubCpo.
 
