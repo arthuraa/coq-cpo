@@ -352,13 +352,13 @@ Qed.
 Canonical subsing_choiceType :=
   Eval hnf in ChoiceType subsing subsing_choiceMixin.
 
-Definition botss_def (x : T) := False.
+Definition bot_subsing_def (x : T) := False.
 
-Lemma botss_proof : forall x y : T, botss_def x -> botss_def y -> x = y.
+Lemma bot_subsing_proof x y : bot_subsing_def x -> bot_subsing_def y -> x = y.
 Proof. by []. Qed.
 
-Definition botss : subsing :=
-  Sub botss_def botss_proof.
+Definition bot_subsing : subsing :=
+  Sub bot_subsing_def bot_subsing_proof.
 
 Record sing := Sing {
   sing_val :> subsing;
@@ -380,7 +380,7 @@ Proof. by rewrite /sing_of=> x y /(congr1 val)/subsing_of_inj. Qed.
 
 End Singletons.
 
-Arguments botss {_}.
+Arguments bot_subsing {_}.
 
 Lemma choose (T : choiceType) (X : subsing T) :
   (exists x, X x) -> {x : T | X x}.
@@ -728,6 +728,70 @@ Qed.
 Definition nat_poMixin := PoMixin nat_apprP.
 Canonical nat_poType := Eval hnf in PoType nat nat_poMixin.
 
+Module Ppo.
+
+Section ClassDef.
+
+Record mixin_of (T : poType) := Mixin {
+  bot : T;
+  _   : forall x, bot ⊑ x;
+}.
+
+Record class_of T := Class {
+  base  : Po.class_of T;
+  mixin : mixin_of (Po.Pack base)
+}.
+
+Record type := Pack {sort; _ : class_of sort}.
+Local Coercion sort : type >-> Sortclass.
+Local Coercion base : class_of >-> Po.class_of.
+Variables (T : Type) (cT : type).
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
+Notation xclass := (class : class_of xT).
+
+Definition pack :=
+  [find p  | Po.sort p ~ T | "not a poType" ]
+  [find pm | Po.class p ~ pm ]
+  fun m => @Pack T (@Class T pm m).
+
+Definition poType := @Po.Pack cT xclass.
+
+End ClassDef.
+
+Module Exports.
+Coercion base : class_of >-> Po.class_of.
+Coercion sort : type >-> Sortclass.
+Coercion poType : type >-> Po.type.
+Canonical poType.
+Notation ppoType := type.
+Notation PpoMixin := Mixin.
+Notation PpoType T m := (@pack T _ unify _ unify m).
+Notation "[ 'ppoType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
+  (at level 0, format "[ 'ppoType'  'of'  T  'for'  cT ]") : form_scope.
+Notation "[ 'ppoType' 'of' T ]" := (@clone T _ _ id)
+  (at level 0, format "[ 'ppoType'  'of'  T ]") : form_scope.
+End Exports.
+
+End Ppo.
+
+Export Ppo.Exports.
+
+Section PpoTheory.
+
+Variable T : ppoType.
+
+Definition bot : T :=
+  Ppo.bot (Ppo.mixin (Ppo.class T)).
+Lemma botP x : bot ⊑ x.
+Proof. by rewrite /bot; case: (Ppo.mixin (Ppo.class T)) x. Qed.
+
+End PpoTheory.
+
+Arguments bot {_}.
+Notation "⊥" := bot : cpo_scope.
+
 Module PoChoice.
 
 Section ClassDef.
@@ -836,8 +900,12 @@ split; first by move=> /(_ x erefl) [y' ->].
 by move=> xy x' <-; exists y.
 Qed.
 
-Lemma botssP X : botss ⊑ X.
+Lemma bot_subsingP X : bot_subsing ⊑ X.
 Proof. by move=> x []. Qed.
+
+Definition subsing_ppoMixin := PpoMixin bot_subsingP.
+Canonical subsing_ppoType :=
+  Eval hnf in PpoType (subsing T) subsing_ppoMixin.
 
 Definition sing_poMixin := [poMixin of sing T by <:].
 Canonical sing_poType := Eval hnf in PoType (sing T) sing_poMixin.
@@ -1780,14 +1848,14 @@ Fixpoint chain_obj n : cpoType :=
 
 Definition chain_mor0_def :
   {cont chain_obj 1 -> chain_obj 0} * {mono chain_obj 0 -> chain_obj 1} :=
-  (cont_const _ botss, mono_const _ (cont_const _ botss)).
+  (cont_const _ bot_subsing, mono_const _ (cont_const _ bot_subsing)).
 
 Lemma chain_mor0_proof : retraction chain_mor0_def.1 chain_mor0_def.2.
 Proof.
 split.
 - move=> /= x; rewrite /const; apply: val_inj.
   by apply: functional_extensionality=> - [].
-- by move=> x; move=> y; rewrite /= /const /=; apply: botssP.
+- by move=> x; move=> y; rewrite /= /const /=; apply: botP.
 Qed.
 
 Definition chain_mor0 : {retr chain_obj 1 -> chain_obj 0} :=
