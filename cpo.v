@@ -648,86 +648,6 @@ Definition CanPoMixin := PoMixin can_apprP.
 
 End CanPo.
 
-Section DFunPo.
-
-Variables (I : Type) (T_ : I -> poType).
-
-Definition fun_appr (f g : forall i, T_ i) := forall i, f i ⊑ g i.
-
-Lemma fun_apprP : Po.axioms fun_appr.
-Proof.
-split.
-- by move=> f i; reflexivity.
-- by move=> f g h fg gh i; move: (fg i) (gh i); apply: transitivity.
-- move=> f g fg gf; apply: functional_extensionality_dep=> i.
-  apply: appr_anti; [exact: fg|exact: gf].
-Qed.
-
-Definition dfun_poMixin := PoMixin fun_apprP.
-Canonical dfun_poType := Eval hnf in PoType (dfun T_) dfun_poMixin.
-
-End DFunPo.
-
-Canonical sfun_poType (T : Type) (S : poType) :=
-  Eval hnf in PoType (sfun T S) (dfun_poMixin _).
-
-Definition mono_poMixin (T S : poType) :=
-  [poMixin of {mono T -> S} by <:].
-Canonical mono_poType (T S : poType) :=
-  Eval hnf in PoType {mono T -> S} (mono_poMixin T S).
-Canonical mono_subPoType (T S : poType) :=
-  Eval hnf in [subPoType of {mono T -> S}].
-
-Section ProdPo.
-
-Variables T S : poType.
-
-Definition prod_appr (x y : T * S) :=
-  x.1 ⊑ y.1 /\ x.2 ⊑ y.2.
-
-Lemma prod_apprP : Po.axioms prod_appr.
-Proof.
-rewrite /prod_appr; split.
-- case=> x y /=; split; reflexivity.
-- by case=> [x1 y1] [x2 y2] [x3 y3] /= [xy1 xy2] [yz1 yz2]; split;
-  [apply: transitivity xy1 yz1|apply: transitivity xy2 yz2].
-- case=> [x1 y1] [x2 y2] /= [xy1 xy2] [yx1 yx2].
-  by rewrite (appr_anti xy1 yx1) (appr_anti xy2 yx2).
-Qed.
-
-Definition prod_poMixin := PoMixin prod_apprP.
-Canonical prod_poType := Eval hnf in PoType (T * S) prod_poMixin.
-
-Lemma monotone_fst : monotone (@fst T S).
-Proof. by case=> [??] [??] []. Qed.
-
-Definition mono_fst : {mono _ -> _} :=
-  Eval hnf in Sub (@fst T S) monotone_fst.
-Canonical mono_fst.
-
-Lemma monotone_snd : monotone (@snd T S).
-Proof. by case=> [??] [??] []. Qed.
-
-Definition mono_snd : {mono _ -> _} :=
-  Eval hnf in Sub (@snd T S) monotone_snd.
-Canonical mono_snd.
-
-End ProdPo.
-
-Arguments mono_fst {_ _}.
-Arguments mono_snd {_ _}.
-
-Lemma nat_apprP : Po.axioms leq.
-Proof.
-split.
-- exact: leqnn.
-- by move=> ???; apply: leq_trans.
-- by move=> n m nm mn; apply: anti_leq; rewrite nm.
-Qed.
-
-Definition nat_poMixin := PoMixin nat_apprP.
-Canonical nat_poType := Eval hnf in PoType nat nat_poMixin.
-
 Module Ppo.
 
 Section ClassDef.
@@ -791,6 +711,125 @@ End PpoTheory.
 
 Arguments bot {_}.
 Notation "⊥" := bot : cpo_scope.
+
+Section DFunPo.
+
+Variables (I : Type) (T_ : I -> poType).
+
+Definition fun_appr (f g : forall i, T_ i) := forall i, f i ⊑ g i.
+
+Lemma fun_apprP : Po.axioms fun_appr.
+Proof.
+split.
+- by move=> f i; reflexivity.
+- by move=> f g h fg gh i; move: (fg i) (gh i); apply: transitivity.
+- move=> f g fg gf; apply: functional_extensionality_dep=> i.
+  apply: appr_anti; [exact: fg|exact: gf].
+Qed.
+
+Definition dfun_poMixin := PoMixin fun_apprP.
+Canonical dfun_poType := Eval hnf in PoType (dfun T_) dfun_poMixin.
+
+End DFunPo.
+
+Canonical sfun_poType (T : Type) (S : poType) :=
+  Eval hnf in PoType (sfun T S) (dfun_poMixin _).
+
+Definition mono_poMixin (T S : poType) :=
+  [poMixin of {mono T -> S} by <:].
+Canonical mono_poType (T S : poType) :=
+  Eval hnf in PoType {mono T -> S} (mono_poMixin T S).
+Canonical mono_subPoType (T S : poType) :=
+  Eval hnf in [subPoType of {mono T -> S}].
+
+Section DFunPpo.
+
+Variables (I : Type) (T_ : I -> ppoType).
+
+Definition fun_bot : dfun T_ := fun x => ⊥.
+
+Lemma fun_botP f : fun_bot ⊑ f.
+Proof. by move=> /= x; exact: botP. Qed.
+
+Definition dfun_ppoMixin := PpoMixin fun_botP.
+Canonical dfun_ppoType := Eval hnf in PpoType (dfun T_) dfun_ppoMixin.
+
+End DFunPpo.
+
+Arguments fun_bot {_ _}.
+
+Canonical sfun_ppoType (T : Type) (S : ppoType) :=
+  Eval hnf in PpoType (sfun T S) (dfun_ppoMixin _).
+
+Section MonoPpo.
+
+Variables (T : poType) (S : ppoType).
+
+Lemma monotone_fun_bot : monotone (@fun_bot T (fun _ => S)).
+Proof. move=> ???; reflexivity. Qed.
+
+Definition mono_bot : {mono T -> S} :=
+  Eval hnf in Sub fun_bot monotone_fun_bot.
+Canonical mono_bot.
+
+Lemma mono_botP f : mono_bot ⊑ f.
+Proof. rewrite appr_val /=; exact: botP. Qed.
+
+Definition mono_ppoMixin := PpoMixin mono_botP.
+Canonical mono_ppoType := Eval hnf in PpoType {mono T -> S} mono_ppoMixin.
+
+End MonoPpo.
+
+Section ProdPo.
+
+Variables T S : poType.
+
+Definition prod_appr (x y : T * S) :=
+  x.1 ⊑ y.1 /\ x.2 ⊑ y.2.
+
+Lemma prod_apprP : Po.axioms prod_appr.
+Proof.
+rewrite /prod_appr; split.
+- case=> x y /=; split; reflexivity.
+- by case=> [x1 y1] [x2 y2] [x3 y3] /= [xy1 xy2] [yz1 yz2]; split;
+  [apply: transitivity xy1 yz1|apply: transitivity xy2 yz2].
+- case=> [x1 y1] [x2 y2] /= [xy1 xy2] [yx1 yx2].
+  by rewrite (appr_anti xy1 yx1) (appr_anti xy2 yx2).
+Qed.
+
+Definition prod_poMixin := PoMixin prod_apprP.
+Canonical prod_poType := Eval hnf in PoType (T * S) prod_poMixin.
+
+Lemma monotone_fst : monotone (@fst T S).
+Proof. by case=> [??] [??] []. Qed.
+
+Definition mono_fst : {mono _ -> _} :=
+  Eval hnf in Sub (@fst T S) monotone_fst.
+Canonical mono_fst.
+
+Lemma monotone_snd : monotone (@snd T S).
+Proof. by case=> [??] [??] []. Qed.
+
+Definition mono_snd : {mono _ -> _} :=
+  Eval hnf in Sub (@snd T S) monotone_snd.
+Canonical mono_snd.
+
+End ProdPo.
+
+Arguments mono_fst {_ _}.
+Arguments mono_snd {_ _}.
+
+Lemma nat_apprP : Po.axioms leq.
+Proof.
+split.
+- exact: leqnn.
+- by move=> ???; apply: leq_trans.
+- by move=> n m nm mn; apply: anti_leq; rewrite nm.
+Qed.
+
+Definition nat_poMixin := PoMixin nat_apprP.
+Canonical nat_poType := Eval hnf in PoType nat nat_poMixin.
+
 
 Module PoChoice.
 
@@ -1108,6 +1147,62 @@ Notation "[ 'cpoMixin' 'of' T 'by' <: ]" :=
   (@SubCpoMixin _ _ [subCpoType of T])
   (at level 0, format "[ 'cpoMixin'  'of'  T  'by'  <: ]") : form_scope.
 
+Module Pcpo.
+
+Section ClassDef.
+
+Record class_of T :=
+  Class {base: Cpo.class_of T; mixin : Ppo.mixin_of (Po.Pack base)}.
+Local Coercion base : class_of >-> Cpo.class_of.
+
+Record type := Pack {sort; _ : class_of sort}.
+Local Coercion sort : type >-> Sortclass.
+Variables (T : Type) (cT : type).
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
+Notation xclass := (class : class_of xT).
+
+Definition pack :=
+  [find b  | Cpo.sort  b ~ T  | "not a cpoType" ]
+  [find c  | Cpo.class b ~ c ]
+  [find b' | Ppo.sort  b' ~ T | "not a ppoType" ]
+  [find m  | Ppo.mixin (Ppo.class b') ~ m ]
+  @Pack T (@Class T c m).
+
+Definition cpoType := @Cpo.Pack cT xclass.
+Definition poChoiceType := @PoChoice.Pack cT xclass.
+Definition choiceType := @Choice.Pack cT xclass.
+Definition ppoType := @Ppo.Pack cT (@Ppo.Class _ xclass (mixin xclass)).
+Definition poType := @Po.Pack cT xclass.
+
+End ClassDef.
+
+Module Exports.
+Coercion base : class_of >-> Cpo.class_of.
+Coercion sort : type >-> Sortclass.
+Coercion cpoType : type >-> Cpo.type.
+Canonical cpoType.
+Coercion poChoiceType : type >-> PoChoice.type.
+Canonical poChoiceType.
+Coercion choiceType : type >-> Choice.type.
+Canonical choiceType.
+Coercion ppoType : type >-> Ppo.type.
+Canonical ppoType.
+Coercion poType : type >-> Po.type.
+Canonical poType.
+Notation pcpoType := type.
+Notation PcpoType T := (@pack T _ unify _ unify _ unify _ unify).
+Notation "[ 'pcpoType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
+  (at level 0, format "[ 'pcpoType'  'of'  T  'for'  cT ]") : form_scope.
+Notation "[ 'pcpoType' 'of' T ]" := (@clone T _ _ id)
+  (at level 0, format "[ 'pcpoType'  'of'  T ]") : form_scope.
+End Exports.
+
+End Pcpo.
+
+Export Pcpo.Exports.
+
 Lemma monotone_dflip (T : poType) S (R : S -> poType)
       (f : {mono T -> dfun R}) x : monotone (flip f x).
 Proof.
@@ -1285,6 +1380,30 @@ Local Notation "{ 'cont' R }" := (cont (Phant R))
 
 Arguments Cont {_ _ _ _}.
 
+Section ContinuousPcpo.
+
+Variables (T : cpoType) (S : pcpoType).
+
+Lemma continuous_mono_bot : continuous (@mono_bot T S).
+Proof.
+move=> x.
+have -> : mono_comp (mono_bot T S) x = mono_const _ ⊥.
+  by apply: val_inj.
+by rewrite sup_const.
+Qed.
+
+Definition cont_bot : {cont T -> S} :=
+  Eval hnf in Sub (mono_bot _ _) continuous_mono_bot.
+
+Lemma cont_botP f : cont_bot ⊑ f.
+Proof. move=> x; exact: botP. Qed.
+
+Definition cont_ppoMixin := PpoMixin cont_botP.
+Canonical cont_ppoType := Eval hnf in PpoType {cont T -> S} cont_ppoMixin.
+Canonical cont_pcpoType := Eval hnf in PcpoType {cont T -> S}.
+
+End ContinuousPcpo.
+
 Lemma continuous_dflip (T : cpoType) S (R : S -> cpoType)
       (f : {cont T -> dfun R}) x : continuous (mono_dflip f x).
 Proof.
@@ -1411,6 +1530,7 @@ Qed.
 
 Definition subsing_cpoMixin := CpoMixin subsing_supP.
 Canonical subsing_cpoType := Eval hnf in CpoType (subsing T) subsing_cpoMixin.
+Canonical subsing_pcpoType := Eval hnf in PcpoType (subsing T).
 
 End SubsingCpo.
 
