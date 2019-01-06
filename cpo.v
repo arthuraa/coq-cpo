@@ -1661,7 +1661,7 @@ Definition retraction (T S : cpoType) (p : T -> S) (e : S -> T) :=
   cancel e p /\ forall x, e (p x) ⊑ x.
 
 Record retr (T S : cpoType) := Retr {
-  retr_val : {cont T -> S} * {mono S -> T};
+  retr_val : {cont T -> S} * {cont S -> T};
   _        : retraction retr_val.1 retr_val.2
 }.
 
@@ -1712,7 +1712,7 @@ Definition retr_retr (T S : cpoType) (p : retr T S) : {cont T -> S} :=
 Coercion retr_retr : retr >-> cont_of.
 
 Definition retr_emb (T S : cpoType) (p : {retr T -> S}) : {cont S -> T} :=
-  Sub (val p).2 (embedding_cont (valP p)).
+  (val p).2.
 
 Notation "p '^e'" := (retr_emb p) (at level 9, format "p ^e").
 
@@ -1734,7 +1734,7 @@ Lemma retraction_id : retraction (@id T) id.
 Proof. by split=> x; reflexivity. Qed.
 
 Definition retr_id : {retr T -> T} :=
-  Eval hnf in Sub (cont_id, mono_id) retraction_id.
+  Eval hnf in Sub (cont_id, cont_id) retraction_id.
 
 Lemma retraction_comp (p1 : {mono S -> R}) (e1 : {mono R -> S})
                       (p2 : {mono T -> S}) (e2 : {mono S -> T}) :
@@ -1747,7 +1747,7 @@ apply: transitivity H _; apply: p2D.
 Qed.
 
 Definition retr_comp (p1 : {retr S -> R}) (p2 : {retr T -> S}) : {retr T -> R} :=
-  Eval hnf in Sub (cont_comp p1 p2, mono_comp p2^e p1^e)
+  Eval hnf in Sub (cont_comp p1 p2, cont_comp p2^e p1^e)
                   (retraction_comp (retrP p1) (retrP p2)).
 
 Lemma emb_retr_comp p1 p2 : (retr_comp p1 p2)^e = cont_comp p2^e p1^e.
@@ -1764,17 +1764,17 @@ Arguments retr_id {_}.
 Lemma retr_compA (A B C D : cpoType) (f : {retr C -> D}) (g : {retr B -> C}) (h : {retr A -> B}) :
   retr_comp f (retr_comp g h) = retr_comp (retr_comp f g) h.
 Proof.
-by apply: val_inj; rewrite /= cont_compA mono_compA.
+by apply: val_inj; rewrite /= cont_compA cont_compA.
 Qed.
 
 Lemma retr_compf1 (A B : cpoType) (f : {retr A -> B}) : retr_comp f retr_id = f.
 Proof.
-by case: f=> [[??] ?]; apply: val_inj; rewrite /= cont_compf1 mono_comp1f.
+by case: f=> [[??] ?]; apply: val_inj; rewrite /= cont_compf1 cont_comp1f.
 Qed.
 
 Lemma retr_comp1f (A B : cpoType) (f : {retr A -> B}) : retr_comp retr_id f = f.
 Proof.
-by case: f=> [[??] ?]; apply: val_inj; rewrite /= cont_comp1f mono_compf1.
+by case: f=> [[??] ?]; apply: val_inj; rewrite /= cont_comp1f cont_compf1.
 Qed.
 
 Definition retr_catMixin := CatMixin retr_comp1f retr_compf1 retr_compA.
@@ -1936,7 +1936,7 @@ Definition cont_outlim n : {cont invlim p -> T n} :=
   Sub (mono_outlim n) (continuous_outlim n).
 
 Definition retr_outlim n : {retr invlim p -> T n} :=
-  Sub (cont_outlim n, mono_inlim n) (retraction_outlim n).
+  Sub (cont_outlim n, cont_inlim n) (retraction_outlim n).
 
 Lemma emb_outlim n : (retr_outlim n)^e = cont_inlim n.
 Proof.
@@ -2046,7 +2046,7 @@ Definition chain_obj n : pcpoType :=
 Local Notation "'X_ n" := (chain_obj n)
   (at level 0, n at level 9, format "''X_' n").
 
-Definition chain_mor0_def : {cont 'X_1 -> 'X_0} * {mono 'X_0 -> 'X_1} :=
+Definition chain_mor0_def : {cont 'X_1 -> 'X_0} * {cont 'X_0 -> 'X_1} :=
   (⊥, ⊥).
 
 Lemma chain_mor0_proof : retraction chain_mor0_def.1 chain_mor0_def.2.
@@ -2074,7 +2074,7 @@ split.
 Qed.
 
 Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F T T -> F S S} :=
-  Sub (f_mor F (f^e, retr_retr f), val (f_mor F (retr_retr f, f^e)))
+  Sub (f_mor F (f^e, retr_retr f), f_mor F (retr_retr f, f^e))
       (@f_emb_proof T S f).
 
 Fixpoint chain_mor n : {retr 'X_n.+1 -> 'X_n} :=
