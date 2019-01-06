@@ -51,9 +51,82 @@ Definition flip T S (R : T -> S -> Type) (f : forall x y, R x y) y x := f x y.
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
-Lemma compA A B C D (f : C -> D) (g : B -> C) (h : A -> B) :
-  f \o (g \o h) = f \o g \o h.
-Proof. by []. Qed.
+Reserved Notation "g ∘ f" (at level 20, left associativity).
+
+Module Cat.
+
+Section ClassDef.
+
+Record mixin_of T (hom : T -> T -> Type) := Mixin {
+  comp : forall A B C, hom B C -> hom A B -> hom A C;
+  id   : forall A, hom A A;
+  _    : forall A B (f : hom A B), comp (id _) f = f;
+  _    : forall A B (f : hom A B), comp f (id _) = f;
+  _    : forall A B C D (h : hom C D) (g : hom B C) (f : hom A B),
+           comp h (comp g f) = comp (comp h g) f
+}.
+
+Notation class_of := mixin_of (only parsing).
+
+Record type := Pack {obj; hom : obj -> obj -> Type; _ : mixin_of hom}.
+Local Coercion obj : type >-> Sortclass.
+Variables (T : Type) (cT : type).
+Definition class := let: Pack _ _ c as cT' := cT return class_of (@hom cT') in c.
+Definition clone h c of phant_id class c := @Pack T h c.
+Let xT := let: Pack T _ _ := cT in T.
+Notation xclass := (class : class_of xT).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Notation cat := type.
+Notation CatMixin := Mixin.
+Notation Cat T h m := (@Pack T h m).
+End Exports.
+
+End Cat.
+
+Export Cat.Exports.
+
+Section CatTheory.
+
+Variable C : cat.
+
+Definition comp := @Cat.comp _ _ (@Cat.class C).
+Definition cat_id := @Cat.id _ _ (@Cat.class C).
+Arguments cat_id {_}.
+
+Local Notation "g ∘ f" := (comp g f).
+Local Notation "1" := cat_id.
+
+Lemma comp1f X Y (f : C X Y) : 1 ∘ f = f.
+Proof. by rewrite /comp /cat_id; case: (@Cat.class C). Qed.
+
+Lemma compf1 X Y (f : C X Y) : f ∘ 1 = f.
+Proof. by rewrite /comp /cat_id; case: (@Cat.class C). Qed.
+
+Lemma compA X Y Z W (h : C Z W) (g : C Y Z) (f : C X Y) :
+  h ∘ (g ∘ f) = h ∘ g ∘ f.
+Proof. by rewrite /comp; case: (@Cat.class C). Qed.
+
+End CatTheory.
+
+Notation "g ∘ f" := (comp g f) : cat_scope.
+Notation "1" := cat_id : cat_scope.
+
+Open Scope cat_scope.
+
+Section FunCat.
+
+Definition sfun_catMixin :=
+  @CatMixin Type sfun (fun _ _ _ g f x => g (f x)) (fun _ x => x)
+            (fun _ _ _ => erefl) (fun _ _ _ => erefl)
+            (fun _ _ _ _ _ _ _ => erefl).
+Canonical Fun := Cat Type sfun sfun_catMixin.
+
+End FunCat.
 
 Definition const (T S : Type) (x : S) (y : T) := x.
 
@@ -63,7 +136,7 @@ Variable (T : Type).
 Implicit Types (x y z : T).
 
 Definition cast (P : T -> Type) x y (e : x = y) : P x -> P y :=
-  match e with erefl => id end.
+  match e with erefl => ssrfun.id end.
 
 Lemma castD (P : T -> Type) x y z (p : x = y) (q : y = z) (a : P x) :
   cast q (cast p a) = cast (etrans p q) a.
@@ -1900,6 +1973,20 @@ Qed.
 
 End BiLimit.
 
+Record lc_functor := LcFunctor {
+  f_obj :> cpoType -> cpoType -> pcpoType;
+  f_mor :  forall {T1 T2 S1 S2 : cpoType},
+             {cont {cont T2 -> T1} * {cont S1 -> S2} ->
+                   {cont f_obj T1 S1 -> f_obj T2 S2}};
+  f_mor1 : forall (T S : cpoType) x,
+             f_mor (@cont_id T, @cont_id S) x = x;
+  f_morD : forall (T1 T2 T3 S1 S2 S3 : cpoType)
+                  (f2 : {cont T3 -> T2}) (f1 : {cont T2 -> T1})
+                  (g1 : {cont S1 -> S2}) (g2 : {cont S2 -> S3}) x,
+             f_mor (cont_comp f1 f2, cont_comp g2 g1) x =
+             f_mor (f2, g2) (f_mor (f1, g1) x)
+}.
+
 Section Void.
 
 Variant void : Set := .
@@ -1929,6 +2016,72 @@ Canonical void_cpoType := Eval hnf in CpoType void void_cpoMixin.
 
 End Void.
 
+Section RecType.
+
+Variable F : lc_functor.
+
+Definition chain_obj n : pcpoType :=
+  iter n (fun T : pcpoType => F T T) [pcpoType of subsing void].
+
+Local Notation "'X_ n" := (chain_obj n)
+  (at level 0, n at level 9, format "''X_' n").
+
+Definition chain_mor0_def : {cont 'X_1 -> 'X_0} * {mono 'X_0 -> 'X_1} :=
+  (⊥, ⊥).
+
+Lemma chain_mor0_proof : retraction chain_mor0_def.1 chain_mor0_def.2.
+Proof.
+split.
+- move=> /= x; apply: val_inj.
+  by apply: functional_extensionality=> - [].
+- by move=> x; rewrite /= /const /=; apply: botP.
+Qed.
+
+Definition chain_mor0 : {retr 'X_1 -> 'X_0} :=
+  Sub chain_mor0_def chain_mor0_proof.
+
+Lemma f_emb_proof (T S : cpoType) (f : {retr T -> S}) :
+  retraction (f_mor F (f^e, retr_retr f)) (f_mor F (retr_retr f, f^e)).
+Proof.
+split.
+- move=> x /=; rewrite -f_morD.
+  suffices -> : cont_comp f f^e = cont_id by rewrite f_mor1.
+  by apply: eq_cont=> y /=; rewrite embK.
+- move=> x; rewrite -f_morD.
+  have /(valP (val (f_mor F)))/(_ x) : (cont_comp f^e f, cont_comp f^e f) ⊑ (cont_id, cont_id).
+    by split; exact: retrD.
+  by rewrite /= f_mor1.
+Qed.
+
+Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F T T -> F S S} :=
+  Sub (f_mor F (f^e, retr_retr f), val (f_mor F (retr_retr f, f^e)))
+      (@f_emb_proof T S f).
+
+Fixpoint chain_mor n : {retr 'X_n.+1 -> 'X_n} :=
+  match n with
+  | 0    => chain_mor0
+  | n.+1 => f_emb (chain_mor n)
+  end.
+
+Definition mu := [cpoType of invlim chain_mor].
+
+Lemma chain_mor_outlim n (x : mu) : chain_mor n (outlim n.+1 x) = outlim n x.
+Proof. Abort.
+
+Definition roll_def (x : F mu mu) n : 'X_n :=
+  match n return 'X_n with
+  | 0    => ⊥
+  | n.+1 => f_mor F (cont_inlim chain_mor n, cont_outlim chain_mor n) x
+  end.
+
+Lemma roll_proof x n : roll_def x n = chain_mor n (roll_def x n.+1).
+Proof.
+case: n=> [|n] //=.
+rewrite /f_emb {1}[in RHS]/retr_retr /= -f_morD.
+Abort.
+
+End RecType.
+
 Section Disc.
 
 Variable T : Type.
@@ -1955,30 +2108,3 @@ Definition disc_cpoMixin := CpoMixin disc_supP.
 Canonical disc_cpoType := Eval hnf in CpoType disc disc_cpoMixin.
 
 End Disc.
-
-Section Universe.
-
-Let F (T : cpoType) := {cont T -> subsing (disc nat * T)}.
-
-Fixpoint chain_obj n : cpoType :=
-  match n with
-  | 0    => [cpoType of subsing void]
-  | n.+1 => [cpoType of F (chain_obj n)]
-  end.
-
-Definition chain_mor0_def :
-  {cont chain_obj 1 -> chain_obj 0} * {mono chain_obj 0 -> chain_obj 1} :=
-  (cont_const _ bot_subsing, mono_const _ (cont_const _ bot_subsing)).
-
-Lemma chain_mor0_proof : retraction chain_mor0_def.1 chain_mor0_def.2.
-Proof.
-split.
-- move=> /= x; rewrite /const; apply: val_inj.
-  by apply: functional_extensionality=> - [].
-- by move=> x; move=> y; rewrite /= /const /=; apply: botP.
-Qed.
-
-Definition chain_mor0 : {retr chain_obj 1 -> chain_obj 0} :=
-  Sub chain_mor0_def chain_mor0_proof.
-
-End Universe.
