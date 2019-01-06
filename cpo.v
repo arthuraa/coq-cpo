@@ -572,18 +572,22 @@ Lemma monotone_comp (T S R : poType) (f : S -> R) (g : T -> S) :
   monotone f -> monotone g -> monotone (f \o g).
 Proof. by move=> mono_f mono_g x y /mono_g/mono_f. Qed.
 
-Record mono (T S : poType) (p : phant (T -> S)) := Mono {
+Record mono (T S : poType) := Mono {
   mono_val :> sfun T S;
   _        :  monotone mono_val
 }.
 
-Arguments Mono {_ _ _ _}.
+Arguments Mono {_ _ _}.
 
-Canonical mono_subType (T S : poType) p :=
-  [subType for @mono_val T S p].
+Definition mono_of (T S : poType) of phant (T -> S) := mono T S.
 
-Notation "{ 'mono' T }" := (mono (Phant T))
+Canonical mono_subType (T S : poType) :=
+  [subType for @mono_val T S].
+
+Notation "{ 'mono' T }" := (mono_of (Phant T))
   (at level 0, format "{ 'mono'  T }") : type_scope.
+
+Identity Coercion mono_of_mono_of : mono_of >-> mono.
 
 Lemma monoP (T S : poType) (f : {mono T -> S}) : monotone f.
 Proof. exact: valP. Qed.
@@ -612,6 +616,9 @@ Proof. by apply: val_inj. Qed.
 
 Lemma mono_compf1 (T S : poType) (f : {mono T -> S}) : mono_comp f mono_id = f.
 Proof. by apply: val_inj. Qed.
+
+Definition mono_catMixin := CatMixin mono_comp1f mono_compf1 mono_compA.
+Canonical mono_catType := Cat poType mono mono_catMixin.
 
 Lemma monotone_cast T (S : T -> poType) (x y : T) (e : x = y) : monotone (cast S e).
 Proof. by case: y / e. Qed.
@@ -1402,15 +1409,19 @@ Variables T S : cpoType.
 Definition continuous (f : {mono T -> S}) :=
   forall (x : chain T), sup (mono_comp f x) = f (sup x).
 
-Record cont (p : phant (T -> S)) := Cont {
+Record cont := Cont {
   cont_val :> {mono T -> S};
   _        :  continuous cont_val
 }.
 
-Local Notation "{ 'cont' R }" := (cont (Phant R))
+Definition cont_of of phant (T -> S) := cont.
+
+Identity Coercion cont_of_cont_of : cont_of >-> cont.
+
+Local Notation "{ 'cont' R }" := (cont_of (Phant R))
   (at level 0, format "{ 'cont'  R }").
 
-Canonical cont_subType p := [subType for @cont_val p].
+Canonical cont_subType := [subType for cont_val].
 Definition cont_poMixin := [poMixin of {cont T -> S} by <:].
 Canonical cont_poType := Eval hnf in PoType {cont T -> S} cont_poMixin.
 Canonical cont_subPoType := [subPoType of {cont T -> S}].
@@ -1448,10 +1459,10 @@ Canonical cont_cpoType := Eval hnf in CpoType {cont T -> S} cont_cpoMixin.
 
 End Continuous.
 
-Local Notation "{ 'cont' R }" := (cont (Phant R))
+Local Notation "{ 'cont' R }" := (cont_of (Phant R))
   (at level 0, format "{ 'cont'  R }") : type_scope.
 
-Arguments Cont {_ _ _ _}.
+Arguments Cont {_ _ _}.
 
 Section ContinuousPcpo.
 
@@ -1525,6 +1536,9 @@ Proof. by apply: val_inj; rewrite /= mono_compf1. Qed.
 
 Lemma cont_comp1f (A B : cpoType) (f : {cont A -> B}) : cont_comp cont_id f = f.
 Proof. by apply: val_inj; rewrite /= mono_comp1f. Qed.
+
+Definition cont_catMixin := CatMixin cont_comp1f cont_compf1 cont_compA.
+Canonical cont_catType := Eval hnf in Cat cpoType cont cont_catMixin.
 
 Lemma continuous_cast T (S : T -> cpoType) x y (e : x = y) : continuous (mono_cast S e).
 Proof. case: y / e=> /=; rewrite mono_cast1; exact: continuous_id. Qed.
@@ -1646,14 +1660,17 @@ Section Retractions.
 Definition retraction (T S : cpoType) (p : T -> S) (e : S -> T) :=
   cancel e p /\ forall x, e (p x) ⊑ x.
 
-Record retr (T S : cpoType) (p : phant (T -> S)) := Retr {
+Record retr (T S : cpoType) := Retr {
   retr_val : {cont T -> S} * {mono S -> T};
   _        : retraction retr_val.1 retr_val.2
 }.
 
-Canonical retr_subType (T S : cpoType) p :=
-  [subType for @retr_val T S p].
-Notation "{ 'retr' T }" := (retr (Phant T))
+Definition retr_of (T S : cpoType) of phant (T -> S) := retr T S.
+Identity Coercion retr_of_retr_of : retr_of >-> retr.
+
+Canonical retr_subType (T S : cpoType) :=
+  [subType for @retr_val T S].
+Notation "{ 'retr' T }" := (retr_of (Phant T))
   (at level 0, format "{ 'retr'  T }") : type_scope.
 Definition retr_choiceMixin (T S : cpoType) :=
   [choiceMixin of {retr T -> S} by <:].
@@ -1689,10 +1706,10 @@ apply: appr_anti; rewrite retractionA; eauto.
 - rewrite e1P.1; reflexivity.
 Qed.
 
-Definition retr_retr (T S : cpoType) (P : phant (T -> S)) (p : retr P) : {cont T -> S} :=
+Definition retr_retr (T S : cpoType) (p : retr T S) : {cont T -> S} :=
   (val p).1.
 
-Coercion retr_retr : retr >-> cont.
+Coercion retr_retr : retr >-> cont_of.
 
 Definition retr_emb (T S : cpoType) (p : {retr T -> S}) : {cont S -> T} :=
   Sub (val p).2 (embedding_cont (valP p)).
@@ -1738,7 +1755,7 @@ Proof. by apply: val_inj. Qed.
 
 End Retractions.
 
-Notation "{ 'retr' T }" := (retr (Phant T))
+Notation "{ 'retr' T }" := (retr_of (Phant T))
   (at level 0, format "{ 'retr'  T }") : type_scope.
 Notation "p '^e'" := (retr_emb p) (at level 9, format "p ^e") : cpo_scope.
 
@@ -1759,6 +1776,9 @@ Lemma retr_comp1f (A B : cpoType) (f : {retr A -> B}) : retr_comp retr_id f = f.
 Proof.
 by case: f=> [[??] ?]; apply: val_inj; rewrite /= cont_comp1f mono_compf1.
 Qed.
+
+Definition retr_catMixin := CatMixin retr_comp1f retr_compf1 retr_compA.
+Canonical retr_catType := Eval hnf in Cat cpoType retr retr_catMixin.
 
 Section BiLimit.
 
