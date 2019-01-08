@@ -1693,6 +1693,33 @@ Proof.
 by rewrite {1}/sup /= /prod_sup; congr (sup _, sup _); apply/eq_mono.
 Qed.
 
+Lemma continuous2P (R : cpoType) (f : {mono T * S -> R}) :
+  continuous f <->
+  (forall (x : chain T) y,
+      f (sup x, y) = sup (f ∘ mono_pairf x (mono_const _ y))) /\
+  (forall x (y : chain S),
+      f (x, sup y) = sup (f ∘ mono_pairf (mono_const _ x) y)).
+Proof.
+split; first move=> cont_f; first split.
+- move=> x y; rewrite cont_f {2}/sup /= /prod_sup -{1}[y]sup_const.
+  congr (f (sup _, sup _)); by apply/eq_mono.
+- move=> x y; rewrite cont_f {2}/sup /= /prod_sup -{1}[x]sup_const.
+  congr (f (sup _, sup _)); by apply/eq_mono.
+case=> cont_f1 cont_f2 /= x; rewrite {2}/sup /= /prod_sup.
+apply: sup_unique; split.
+  move=> n /=; apply: monoP.
+  case: (supP (mono_fst ∘ x))=> [/(_ n) /= ub_x1 _].
+  case: (supP (mono_snd ∘ x))=> [/(_ n) /= ub_x2 _].
+  by split.
+move=> y ub_y; rewrite cont_f1.
+case: (supP (f ∘ mono_pairf (mono_fst ∘ x) (mono_const _ (sup (mono_snd ∘ x))))).
+move=> _; apply=> n; rewrite /= /pairf /const /= cont_f2.
+case: (supP (f ∘ mono_pairf (mono_const _ (x n).1) (mono_snd ∘ x))).
+move=> _; apply=> m; rewrite /= /pairf /const /=.
+apply: transitivity (ub_y (maxn n m)); apply: monoP; split=> /=;
+apply: monoP; apply: monoP; [exact: leq_maxl|exact: leq_maxr].
+Qed.
+
 End ProdCpo.
 
 Arguments cont_fst {_ _}.
@@ -1713,6 +1740,13 @@ Lemma continuous_cont_compL (T S R : cpoType)
 Proof.
 apply: eq_cont=> x /=; rewrite /sup /= /dfun_sup; congr sup.
 by apply/eq_mono.
+Qed.
+
+Lemma continuous_cont_compp (T S R : cpoType) :
+  continuous (@mono_cont_compp T S R).
+Proof.
+apply/continuous2P; split;
+[exact: continuous_cont_compL|exact: continuous_cont_compR].
 Qed.
 
 Definition mapp (T1 S1 T2 S2 : Type) (f1 : T1 -> S1) (f2 : T2 -> S2) :=
