@@ -393,6 +393,14 @@ Canonical subsing_subType := [subType for subsing_val].
 Lemma subsingP (X : subsing) x y : X x -> X y -> x = y.
 Proof. by case: X => [X]; apply. Qed.
 
+Lemma eq_subsing (X Y : subsing) :
+  (forall x, X x <-> Y x) <-> X = Y.
+Proof.
+split; last by move=> ->.
+move=> H; apply: val_inj; apply: functional_extensionality.
+by move=> x; apply: propositional_extensionality.
+Qed.
+
 Lemma subsing_of_proof (x : T) :
   forall y z, x = y -> x = z -> y = z.
 Proof. by move=> ?? <-. Qed.
@@ -1113,13 +1121,34 @@ Definition mono_liftss (T S : poType) (f : {mono T -> subsing S}) :
   {mono subsing T -> subsing S} :=
   Sub (liftss f) (@monotone_liftss _ _ f).
 Canonical mono_liftss.
+Arguments mono_liftss {_ _}.
 
-Lemma monotone_mapss (T S : poType) (f : {mono T -> S}) : monotone (mapss f).
-Proof. exact: (@monotone_liftss _ _ (mono_subsing_of ∘ f)). Qed.
+Lemma monotone2_liftss (T S : poType) : monotone (@mono_liftss T S).
+Proof.
+move=> /= f g fg X y /= [x Xx fx].
+case/(_ _ _ fx): fg=> [/= y' gx yy'].
+by exists y'=> //; exists x.
+Qed.
+
+Definition mono2_liftss (T S : poType) :
+  {mono {mono T -> subsing S} -> {mono subsing T -> subsing S}} :=
+  Sub mono_liftss (@monotone2_liftss _ _).
+Canonical mono2_liftss.
 
 Definition mono_mapss (T S : poType) (f : {mono T -> S}) : {mono _ -> _} :=
-  Eval hnf in Sub (mapss f) (@monotone_mapss _ _ f).
+  Eval hnf in Sub (mapss f) (@monotone_liftss _ _ (mono_subsing_of ∘ f)).
 Canonical mono_mapss.
+Arguments mono_mapss {_ _}.
+
+Lemma monotone2_mapss (T S : poType) : monotone (@mono_mapss T S).
+Proof.
+move=> f g fg; rewrite appr_val /= /mapss.
+by apply: monotone2_liftss; apply: monotone_mono_comp; first reflexivity.
+Qed.
+
+Definition mono2_mapss (T S : poType) :
+  {mono {mono T -> S} -> {mono subsing T -> subsing S}} :=
+  @Mono _ _ (@mono_mapss T S) (@monotone2_mapss T S).
 
 Section Supremum.
 
@@ -1777,9 +1806,24 @@ by case=> [x1 y1] [x2 y2] [/= x12 y12]; split;
 [apply: (valP f1 _ _ x12)|apply: (valP f2 _ _ y12)].
 Qed.
 
-Definition mono_mapp (T1 S1 T2 S2 : poType) (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) : {mono _ -> _} :=
+Definition mono_mapp (T1 S1 T2 S2 : poType)
+  (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) : {mono _ -> _} :=
   Eval hnf in Sub (mapp f1 f2) (monotone_mapp f1 f2).
 Canonical mono_mapp.
+
+Lemma continuous_mapp (T1 S1 T2 S2 : cpoType)
+  (f1 : {cont T1 -> S1}) (f2 : {cont T2 -> S2}) :
+  continuous (mono_mapp f1 f2).
+Proof.
+move=> /= x; rewrite /mapp -2!contP {1}/sup /= /prod_sup.
+congr (sup _, sup _); exact/eq_mono.
+Qed.
+
+Definition cont_mapp (T1 S1 T2 S2 : cpoType)
+  (f1 : {cont T1 -> S1}) (f2 : {cont T2 -> S2}) :
+  {cont T1 * T2 -> S1 * S2} :=
+  Sub (mono_mapp f1 f2) (continuous_mapp f1 f2).
+Canonical cont_mapp.
 
 Section SubsingCpo.
 
@@ -1886,6 +1930,59 @@ Definition cont_liftss (T S : cpoType) (f : {cont T -> subsing S}) :
   {cont subsing T -> subsing S} :=
   Sub (mono_liftss f) (continuous_liftss f).
 Canonical cont_liftss.
+
+Lemma monotone2_cont_liftss (T S : cpoType) : monotone (@cont_liftss T S).
+Proof. exact: monotone2_liftss. Qed.
+
+Definition mono2_cont_liftss (T S : cpoType) :
+  {mono {cont T -> subsing S} -> {cont subsing T -> subsing S}} :=
+  Sub _ (@monotone2_cont_liftss T S).
+Canonical mono2_cont_liftss.
+Arguments mono2_cont_liftss {_ _}.
+
+Lemma continuous2_liftss (T S : cpoType) : continuous (@mono2_cont_liftss T S).
+Proof.
+move=> /= f; apply/eq_cont=> /= X; apply/eq_subsing=> sup_fx; split.
+- case=> y [/= n [fXE ->]] {sup_fx}.
+  case/(_ 0): (fXE)=> [x Xx _]; exists x=> //.
+  exists y, n; split=> // m /=; rewrite /flip /=.
+  by case/(_ m): (fXE)=> _ /(subsingP Xx) <-.
+- case=> [x Xx [y [n [/= fXE ->]]]]; exists y, n; split=> // m /=.
+  exists x=> //; exact: fXE.
+Qed.
+
+Definition cont2_liftss (T S : cpoType) :
+  {cont {cont T -> subsing S} -> {cont subsing T -> subsing S}} :=
+  Sub _ (@continuous2_liftss T S).
+Canonical cont2_liftss.
+Arguments cont2_liftss {_ _}.
+
+Lemma continuous_mapss (T S : cpoType) (f : {cont T -> S}) :
+  continuous (mono_mapss f).
+Proof.
+move=> x; rewrite /mono_mapss /mapss /=.
+by rewrite -(contP (cont_liftss (cont_subsing_of ∘ f))).
+Qed.
+
+Definition cont_mapss (T S : cpoType) (f : {cont T -> S}) :
+  {cont subsing T -> subsing S} :=
+  Sub (mono_mapss f) (continuous_mapss f).
+Canonical cont_mapss.
+
+Lemma monotone2_cont_mapss (T S : cpoType) : monotone (@cont_mapss T S).
+Proof.
+move=> /= f g fg; rewrite appr_val /=; exact: monotone2_mapss.
+Qed.
+
+Definition mono2_cont_mapss (T S : cpoType) :
+  {mono {cont T -> S} -> {cont subsing T -> subsing S}} :=
+  Sub _ (@monotone2_cont_mapss T S).
+Canonical mono2_cont_mapss.
+
+Definition cont2_mapss (T S : cpoType) :
+  {cont {cont T -> S} -> {cont subsing T -> subsing S}} :=
+  @cont2_liftss T S ∘ cont_compp ∘ (cont_pairf (cont_const _ cont_subsing_of) 1).
+Arguments cont2_mapss {_ _}.
 
 Section InverseLimit.
 
