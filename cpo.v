@@ -390,6 +390,9 @@ Record subsing := Subsing {
 
 Canonical subsing_subType := [subType for subsing_val].
 
+Lemma subsingP (X : subsing) x y : X x -> X y -> x = y.
+Proof. by case: X => [X]; apply. Qed.
+
 Lemma subsing_of_proof (x : T) :
   forall y z, x = y -> x = z -> y = z.
 Proof. by move=> ?? <-. Qed.
@@ -463,6 +466,7 @@ Proof. by rewrite /sing_of=> x y /(congr1 val)/subsing_of_inj. Qed.
 End Singletons.
 
 Arguments bot_subsing {_}.
+Arguments subsing_of {_}.
 
 Lemma choose (T : choiceType) (X : subsing T) :
   (exists x, X x) -> {x : T | X x}.
@@ -476,18 +480,6 @@ Section SingletonMap.
 
 Variables T S : Type.
 
-Definition mapss_def (f : T -> S) (x : subsing T) (y : S) :=
-  exists2 x0, x x0 & y = f x0.
-
-Lemma mapss_proof f x y1 y2 :
-  mapss_def f x y1 -> mapss_def f x y2 -> y1 = y2.
-Proof.
-by case=> [x1 x1P ->] [x2 x2P ->]; rewrite (valP x x1 x2).
-Qed.
-
-Definition mapss f x : subsing S :=
-  Sub (mapss_def f x) (@mapss_proof f x).
-
 Definition liftss_def (f : T -> subsing S) (x : subsing T) (y : S) :=
   exists2 x0, x x0 & f x0 y.
 
@@ -500,6 +492,8 @@ Qed.
 
 Definition liftss f x : subsing S :=
   Sub (liftss_def f x) (@liftss_proof f x).
+
+Definition mapss (f : T -> S) := liftss (subsing_of \o f).
 
 End SingletonMap.
 
@@ -1084,6 +1078,13 @@ split; first by move=> /(_ x erefl) [y' ->].
 by move=> xy x' <-; exists y.
 Qed.
 
+Lemma monotone_subsing_of : monotone subsing_of.
+Proof. by move=> x y; rewrite subsing_of_appr. Qed.
+
+Definition mono_subsing_of : {mono T -> subsing T} :=
+  Sub subsing_of monotone_subsing_of.
+Canonical mono_subsing_of.
+
 Lemma bot_subsingP X : bot_subsing ⊑ X.
 Proof. by move=> x []. Qed.
 
@@ -1098,12 +1099,23 @@ Canonical sing_poChoiceType := Eval hnf in PoChoiceType (sing T).
 
 End SubsingPo.
 
-Lemma monotone_mapss (T S : poType) (f : {mono T -> S}) : monotone (mapss f).
+Arguments mono_subsing_of {_}.
+
+Lemma monotone_liftss (T S : poType) (f : {mono T -> subsing S}) :
+  monotone (liftss f).
 Proof.
-move=> X Y XY _ [x Xx ->]; case/(_ _ Xx): XY=> [y Yy xy].
-exists (f y); last exact: (valP f _ _ xy).
-by exists y.
+move=> X X' XX' y [x Xx fx].
+case/(_ _ Xx): XX'=> [x' X'x' /(monoP f)/(_ _ fx) [y' fx' yy']].
+by exists y'=> //; exists x'.
 Qed.
+
+Definition mono_liftss (T S : poType) (f : {mono T -> subsing S}) :
+  {mono subsing T -> subsing S} :=
+  Sub (liftss f) (@monotone_liftss _ _ f).
+Canonical mono_liftss.
+
+Lemma monotone_mapss (T S : poType) (f : {mono T -> S}) : monotone (mapss f).
+Proof. exact: (@monotone_liftss _ _ (mono_subsing_of ∘ f)). Qed.
 
 Definition mono_mapss (T S : poType) (f : {mono T -> S}) : {mono _ -> _} :=
   Eval hnf in Sub (mapss f) (@monotone_mapss _ _ f).
@@ -1749,6 +1761,12 @@ apply/continuous2P; split;
 [exact: continuous_cont_compL|exact: continuous_cont_compR].
 Qed.
 
+Definition cont_compp (T S R : cpoType) :
+  {cont {cont S -> R} * {cont T -> S} -> {cont T -> R}} :=
+  Sub (@mono_cont_compp T S R) (@continuous_cont_compp T S R).
+Canonical cont_compp.
+Arguments cont_compp {_ _ _}.
+
 Definition mapp (T1 S1 T2 S2 : Type) (f1 : T1 -> S1) (f2 : T2 -> S2) :=
   fun x : T1 * T2 => (f1 x.1, f2 x.2).
 
@@ -1769,22 +1787,16 @@ Variables (T : cpoType).
 
 Definition subsing_sup_def (X : chain (subsing T)) x :=
   exists (y : chain T) (n : nat),
-  (forall m, X (n + m) = subsing_of (y m)) /\
-  supremum y x.
+  (forall m, X (n + m) (y m)) /\ x = sup y.
 
 Lemma subsing_sup_subproof X x1 x2 :
   subsing_sup_def X x1 -> subsing_sup_def X x2 -> x1 = x2.
 Proof.
-move=> [y1 [n1 [y1X x1P]]] [y2 [n2 [y2X x2P]]].
-pose y := shift y1 (n2 - n1).
-have {x1P} x1P : supremum y x1 by exact: supremum_shift (valP y1) _.
-suffices: supremum y x2 by apply: supremum_unique x1P.
-have -> : y = shift y2 (n1 - n2).
-  apply: functional_extensionality=> n.
-  rewrite /y /shift.
-  apply: subsing_of_inj.
-  by rewrite -y1X -y2X !addnA -!maxnE maxnC.
-by apply: supremum_shift (valP y2) _.
+move=> [y1 [n1 [y1X ->]]] [y2 [n2 [y2X ->]]].
+rewrite -(sup_shift y1 (n2 - n1)) -(sup_shift y2 (n1 - n2)).
+congr sup; apply/eq_mono=> m /=; apply: subsing_of_inj.
+rewrite /shift /= -(in_subsing (y1X _)) -(in_subsing (y2X _)).
+by rewrite !addnA -!maxnE maxnC.
 Qed.
 
 Definition subsing_sup (X : chain (subsing T)) : subsing T :=
@@ -1805,24 +1817,75 @@ split.
     have [x' X_n2' ?] := valP X _ _ n1n2 _ X_n1.
     by rewrite (valP (X (n + n2)) _ _ X_n2 X_n2').
   exists (sup (Mono y_mono)).
-    exists (Mono y_mono), n; split; last exact: supP.
-    by move=> m; apply/in_subsing/(valP (choose (H m))).
+    exists (Mono y_mono), n; split=> //.
+    by move=> m; apply/(valP (choose (H m))).
   suffices -> : x = y 0.
     by case: (supP (Mono y_mono))=> [/= ub_y _]; apply: ub_y.
   rewrite /y; case: (choose _)=> z; rewrite /= addn0=> zP.
   by rewrite (valP (X n) _ _ Xnx zP).
-- move=> /= ub_X ub_XP x [y [n [eq_y sup_x]]].
-  move/(_ (n + 0)): (ub_XP); rewrite eq_y.
+- move=> /= ub_X ub_XP _ [y [n [eq_y ->]]].
+  move/(_ (n + 0)): (ub_XP); rewrite (in_subsing (eq_y _)).
   case/(_ _ erefl)=> z zP _; exists z=> //.
-  case: sup_x=> _; apply=> m; apply/subsing_of_appr.
-  rewrite -eq_y -(in_subsing zP); exact: ub_XP.
+  case: (supP y)=> _; apply=> m; apply/subsing_of_appr.
+  rewrite -(in_subsing (eq_y _)) -(in_subsing zP); exact: ub_XP.
 Qed.
 
 Definition subsing_cpoMixin := CpoMixin subsing_supP.
 Canonical subsing_cpoType := Eval hnf in CpoType (subsing T) subsing_cpoMixin.
 Canonical subsing_pcpoType := Eval hnf in PcpoType (subsing T).
 
+Lemma continuous_subsing_of : continuous (@mono_subsing_of T).
+Proof.
+move=> x; apply: val_inj; apply: functional_extensionality=> y /=.
+apply: propositional_extensionality; split; last first.
+  move=> <- {y}; exists x, 0; split=> //; exact: supP.
+case=> [x' [n [/= x'E ->]]].
+rewrite -(sup_shift x n); congr sup; apply/eq_mono=> m /=; exact: x'E.
+Qed.
+
+Definition cont_subsing_of : {cont T -> subsing T} :=
+  Sub mono_subsing_of continuous_subsing_of.
+Canonical cont_subsing_of.
+
 End SubsingCpo.
+
+Arguments cont_subsing_of {_}.
+
+Lemma continuous_liftss (T S : cpoType) (f : {cont T -> subsing S}) :
+  continuous (mono_liftss f).
+Proof.
+move=> /= X; apply: val_inj; apply: functional_extensionality=> sup_y /=.
+apply: propositional_extensionality; split.
+- case=> [y [n [fXE ->]]].
+  pose P m x := X (n + m) x /\ f x (y m).
+  have Pss : forall m x1 x2, P m x1 -> P m x2 -> x1 = x2.
+    by move=> m x1 x2 [/= H1 _] [/= H2 _]; apply: subsingP H1 H2.
+  have {fXE} fXE: forall m, exists x, (Subsing (Pss m)) x.
+    by move=> m; rewrite /=; case: (fXE m); rewrite /P /=; eauto.
+  pose x m := val (choose (fXE m)).
+  have x_mono : monotone x.
+    move=> m1 m2 m12; rewrite /x.
+    case: (choose (fXE m1))=> [x1 /= [x1P fx1]].
+    case: (choose (fXE m2))=> [x2 /= [x2P fx2]].
+    move: m12; rewrite {1}/appr /= -(leq_add2l n).
+    case/(monoP X)/(_ _ x1P)=> [x2' x2'P].
+    by rewrite (subsingP x2P x2'P).
+  exists (sup (Mono x_mono)).
+    exists (Mono x_mono), n; split=> // m; rewrite /= /x.
+    by case: (choose _)=> [? [??]].
+  rewrite -contP; exists y, 0; split=> // m; rewrite /= /x.
+  by case: (choose _)=> [? []].
+- case=> [_ [x [n [XE ->]]]].
+  rewrite -contP; case=> [y [n' [fXE ->]]].
+  exists y, (n' + n); split=> // m; rewrite /=.
+  exists (x (n' + m)); last exact: fXE.
+  rewrite [n' + n]addnC -addnA; exact: XE.
+Qed.
+
+Definition cont_liftss (T S : cpoType) (f : {cont T -> subsing S}) :
+  {cont subsing T -> subsing S} :=
+  Sub (mono_liftss f) (continuous_liftss f).
+Canonical cont_liftss.
 
 Section InverseLimit.
 
