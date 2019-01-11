@@ -55,6 +55,9 @@ Definition pairf T S R (f : R -> T) (g : R -> S) x := (f x, g x).
 Definition uncurry T S R (f : T -> S -> R) (p : T * S) :=
   f p.1 p.2.
 
+Definition curry T S R (f : T * S -> R) x y :=
+  f (x, y).
+
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
@@ -88,9 +91,9 @@ End ClassDef.
 Module Exports.
 Coercion obj : type >-> Sortclass.
 Coercion hom : type >-> Funclass.
-Notation cat := type.
+Notation catType := type.
 Notation CatMixin := Mixin.
-Notation Cat T h m := (@Pack T h m).
+Notation CatType T h m := (@Pack T h m).
 End Exports.
 
 End Cat.
@@ -99,7 +102,7 @@ Export Cat.Exports.
 
 Section CatTheory.
 
-Variable C : cat.
+Variable C : catType.
 
 Definition comp := @Cat.comp _ _ (@Cat.class C).
 Definition cat_id := @Cat.id _ _ (@Cat.class C).
@@ -133,9 +136,178 @@ Definition sfun_catMixin :=
   @CatMixin Type sfun (fun _ _ _ f g x => f (g x)) (fun _ x => x)
             (fun _ _ _ => erefl) (fun _ _ _ => erefl)
             (fun _ _ _ _ _ _ _ => erefl).
-Canonical Fun := Cat Type sfun sfun_catMixin.
+Canonical Fun := CatType Type sfun sfun_catMixin.
 
 End FunCat.
+
+Module TermCat.
+
+Record mixin_of C (hom : C -> C -> Type) := Mixin {
+  term : C;
+  bang : forall X, hom X term;
+  _    : forall X (f : hom X term), f = bang X
+}.
+
+Record class_of C (hom : C -> C -> Type) :=
+  Class {base : Cat.mixin_of hom; mixin : mixin_of hom}.
+
+Section ClassDef.
+
+Record type := Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion base : class_of >-> Cat.mixin_of.
+Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
+Definition clone c of phant_id class c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ class.
+
+Definition pack m :=
+  [find c | @Cat.hom c ~ C1 | "not a catType" ]
+  [find b | Cat.class c ~ b ]
+  @Pack C0 C1 (@Class _ _ b m).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion catType : type >-> Cat.type.
+Notation termCatType := type.
+Notation TermCatMixin := Mixin.
+Notation TermCatType C0 C1 m := (@pack C0 C1 m _ unify _ unify).
+End Exports.
+
+End TermCat.
+
+Export TermCat.Exports.
+
+Section TermCatTheory.
+
+Variable C : termCatType.
+
+Definition term : C :=
+  TermCat.term (TermCat.mixin (TermCat.class C)).
+
+Definition bang (X : C) : C X term :=
+  TermCat.bang (TermCat.mixin (TermCat.class C)) X.
+
+Local Notation "'!" := (bang _) (at level 0).
+Local Notation "''!_' X" := (bang X)
+  (at level 0, X at level 9, format "''!_' X").
+
+Lemma bangP X (f : C X term) : f = '!.
+Proof.
+by move: X f; rewrite /term /bang; case: (TermCat.mixin _).
+Qed.
+
+End TermCatTheory.
+
+Local Notation "'!" := (bang _) (at level 0) : cat_scope.
+Local Notation "''!_' X" := (bang X)
+  (at level 0, X at level 9, format "''!_' X") : cat_scope.
+
+Module ProdCat.
+
+Record mixin_of (C : catType) := Mixin {
+  prod  : C -> C -> C;
+  pair  : forall X Y Z, C Z X -> C Z Y -> C Z (prod X Y);
+  proj1 : forall X Y, C (prod X Y) X;
+  proj2 : forall X Y, C (prod X Y) Y;
+  _     : forall X Y Z (f : C Z X) (g : C Z Y),
+            proj1 _ _ ∘ pair f g = f;
+  _     : forall X Y Z (f : C Z X) (g : C Z Y),
+            proj2 _ _ ∘ pair f g = g;
+  _     : forall X Y Z (f g : C Z (prod X Y)),
+            proj1 _ _ ∘ f = proj1 _ _ ∘ g /\
+            proj2 _ _ ∘ f = proj2 _ _ ∘ g ->
+            f = g
+}.
+
+Section ClassDef.
+
+Record class_of C (hom : C -> C -> Type) := Class {
+  base  : Cat.mixin_of hom;
+  mixin : mixin_of (Cat.Pack base)
+}.
+
+Record type := Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion hom : type >-> Funclass.
+Local Coercion base : class_of >-> Cat.mixin_of.
+Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
+Definition clone c of phant_id class c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ class.
+
+Definition pack :=
+  [find c | @Cat.hom c ~ C1 | "not a catType" ]
+  [find b | Cat.class c ~ b ]
+  fun m => @Pack C0 C1 (@Class C0 C1 b m).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion catType : type >-> Cat.type.
+Canonical catType.
+Notation prodCatType := type.
+Notation ProdCatMixin := Mixin.
+Notation ProdCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
+End Exports.
+
+End ProdCat.
+
+Export ProdCat.Exports.
+
+Section ProdCatTheory.
+
+Variable C : prodCatType.
+
+Definition cat_prod (X Y : C) : C :=
+  ProdCat.prod (ProdCat.mixin (ProdCat.class C)) X Y.
+Local Notation "X × Y" := (cat_prod X Y)
+  (at level 50, left associativity) : cat_scope.
+Definition cat_pair X Y Z (f : C Z X) (g : C Z Y) : C Z (X × Y) :=
+  ProdCat.pair (ProdCat.mixin (ProdCat.class C)) f g.
+Local Notation "⟨ f , g , .. , h ⟩" :=
+  (cat_pair .. (cat_pair f g) .. h)
+  (format "⟨ f ,  g ,  .. ,  h ⟩").
+Definition cat_proj1 X Y : C (X × Y) X :=
+  ProdCat.proj1 (ProdCat.mixin (ProdCat.class C)) X Y.
+Definition cat_proj2 X Y : C (X × Y) Y :=
+  ProdCat.proj2 (ProdCat.mixin (ProdCat.class C)) X Y.
+Local Notation "'π1" := (cat_proj1 _ _).
+Local Notation "'π2" := (cat_proj2 _ _).
+
+Lemma pairKL X Y Z (f : C Z X) (g : C Z Y) : 'π1 ∘ ⟨f, g⟩ = f.
+Proof.
+by move: f g; rewrite /cat_proj1 /cat_pair /cat_prod; case: (ProdCat.mixin _).
+Qed.
+
+Lemma pairKR X Y Z (f : C Z X) (g : C Z Y) : 'π2 ∘ ⟨f, g⟩ = g.
+Proof.
+by move: f g; rewrite /cat_proj2 /cat_pair /cat_prod; case: (ProdCat.mixin _).
+Qed.
+
+Lemma pairP X Y Z (f g : C Z (X × Y)) :
+  'π1 ∘ f = 'π1 ∘ g /\ 'π2 ∘ f = 'π2 ∘ g -> f = g.
+Proof.
+move: f g; rewrite /cat_proj1 /cat_proj2 /cat_pair /cat_prod.
+by case: (ProdCat.mixin _) => /= ???? _ _; apply.
+Qed.
+
+End ProdCatTheory.
+
+Notation "X × Y" := (cat_prod X Y)
+  (at level 50, left associativity) : cat_scope.
+Local Notation "⟨ f , g , .. , h ⟩" :=
+  (cat_pair .. (cat_pair f g) .. h)
+  (format "⟨ f ,  g ,  .. ,  h ⟩") : cat_scope.
+Notation "'π1" := (cat_proj1 _ _).
+Notation "'π2" := (cat_proj2 _ _).
 
 Definition const (T S : Type) (x : S) (y : T) := x.
 
@@ -946,6 +1118,28 @@ Definition mono_uncurry (R : poType) (f : {mono T -> {mono S -> R}}) :
   Sub (uncurry (mono_val' ∘ f)) (@monotone_uncurry _ f).
 Canonical mono_uncurry.
 
+Lemma monotone1_curry (R : poType) (f : {mono T * S -> R}) (x : T) :
+  monotone (curry f x).
+Proof.
+by move=> y1 y2 y12; apply: monoP; split; first reflexivity.
+Qed.
+
+Definition mono1_curry (R : poType) (f : {mono T * S -> R}) (x : T) :
+  {mono S -> R} :=
+  Mono (monotone1_curry f x).
+Canonical mono1_curry.
+
+Lemma monotone_curry (R : poType) (f : {mono T * S -> R}) :
+  monotone (mono1_curry f).
+Proof.
+by move=> x1 x2 x12 y /=; rewrite /curry; apply: monoP; split; last reflexivity.
+Qed.
+
+Definition mono_curry (R : poType) (f : {mono T * S -> R}) :
+  {mono T -> {mono S -> R}} :=
+  Mono (monotone_curry f).
+Canonical mono_curry.
+
 End ProdPo.
 
 Arguments mono_fst {_ _}.
@@ -1681,6 +1875,7 @@ Proof. by move=> y; rewrite mono_comp_constL sup_const. Qed.
 
 Definition cont_const (T S : cpoType) (x : S) : {cont T -> S} :=
   Eval hnf in Sub (@mono_const T S x) (continuous_const x).
+Canonical cont_const.
 
 Section ProdCpo.
 
@@ -1727,6 +1922,7 @@ Qed.
 Definition cont_pairf (R : cpoType) (f : {cont R -> T}) (g : {cont R -> S}) :
   {cont R -> T * S} :=
   Sub (@mono_pairf _ _ _ f g) (continuous_pairf f g).
+Canonical cont_pairf.
 
 Lemma sup_pairf (f : chain T) (g : chain S) :
   sup (mono_pairf f g) = (sup f, sup g).
@@ -1824,6 +2020,44 @@ Definition cont_mapp (T1 S1 T2 S2 : cpoType)
   {cont T1 * T2 -> S1 * S2} :=
   Sub (mono_mapp f1 f2) (continuous_mapp f1 f2).
 Canonical cont_mapp.
+
+Definition cont2_mapp_def (T1 S1 T2 S2 : cpoType)
+  (f : {cont T1 -> S1} * {cont T2 -> S2}) :
+  {cont T1 * T2 -> S1 * S2} :=
+  cont_mapp f.1 f.2.
+
+Lemma monotone_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
+  monotone (@cont2_mapp_def T1 S1 T2 S2).
+Proof.
+move=> /= [f1 g1] [f2 g2] [/= f12 g12] [x1 y1] /=; rewrite /mapp /=.
+split; [exact: f12|exact: g12].
+Qed.
+
+Definition mono_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
+  {mono {cont T1 -> S1} * {cont T2 -> S2} ->
+        {cont T1 * T2 -> S1 * S2}} :=
+  Sub (@cont2_mapp_def T1 S1 T2 S2) (@monotone_cont2_mapp_def T1 S1 T2 S2).
+Canonical mono_cont2_mapp_def.
+
+Lemma continuous_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
+  continuous (@mono_cont2_mapp_def T1 S1 T2 S2).
+Proof.
+apply/continuous2P; split.
+- move=> /= f g; apply/eq_cont=> /= p.
+  congr (sup _, _); first by apply/eq_mono.
+  by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
+- move=> /= f g; apply/eq_cont=> /= p.
+  congr (_, sup _); last by apply/eq_mono.
+  by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
+Qed.
+
+Definition cont2_mapp (T1 S1 T2 S2 : cpoType) :
+  {cont {cont T1 -> S1} * {cont T2 -> S2} ->
+        {cont T1 * T2 -> S1 * S2}} :=
+  Sub (@mono_cont2_mapp_def T1 S1 T2 S2)
+      (@continuous_cont2_mapp_def T1 S1 T2 S2).
+Canonical cont2_mapp.
+Arguments cont2_mapp {_ _ _ _}.
 
 Section SubsingCpo.
 
