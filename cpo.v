@@ -52,12 +52,6 @@ Definition flip T S (R : T -> S -> Type) (f : forall x y, R x y) y x := f x y.
 
 Definition pairf T S R (f : R -> T) (g : R -> S) x := (f x, g x).
 
-Definition uncurry T S R (f : T -> S -> R) (p : T * S) :=
-  f p.1 p.2.
-
-Definition curry T S R (f : T * S -> R) x y :=
-  f (x, y).
-
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
@@ -491,6 +485,98 @@ End Exports.
 End CartCat.
 
 Export CartCat.Exports.
+
+Module CCCat.
+
+Section ClassDef.
+
+Record mixin_of (C : cartCatType) := Mixin {
+  exp   : C -> C -> C;
+  curry : forall X Y Z, C (X × Y) Z -> C X (exp Y Z);
+  eval  : forall {X Y}, C (exp X Y × X) Y;
+  _     : forall X Y Z (f : C (X × Y) Z),
+            eval ∘ ⟨curry f ∘ 'π1, 'π2⟩ = f;
+  _     : forall X Y Z (f : C X (exp Y Z)),
+            curry (eval ∘ ⟨f ∘ 'π1, 'π2⟩) = f
+}.
+
+Record class_of C (hom : C -> C -> Type) := Class {
+  base : CartCat.class_of hom;
+  mixin : mixin_of (CartCat.Pack base)
+}.
+
+Polymorphic Record type :=
+  Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion hom : type >-> Funclass.
+Local Coercion base : class_of >-> CartCat.class_of.
+Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
+Definition clone c of phant_id class c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ class.
+Definition termCatType :=
+  @TermCat.Pack _ _ (TermCat.Class class (CartCat.term_mixin class)).
+Definition prodCatType :=
+  @ProdCat.Pack _ _ (ProdCat.Class (CartCat.prod_mixin class)).
+Definition cartCatType := @CartCat.Pack _ _ class.
+
+Definition pack :=
+  [find cc | @CartCat.hom cc ~ C1 | "not a cartCatType" ]
+  [find cb | @CartCat.class cc ~ cb ]
+  fun m => @Pack C0 C1 (@Class _ _ cb m).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion base : class_of >-> CartCat.class_of.
+Coercion catType : type >-> Cat.type.
+Canonical catType.
+Coercion termCatType : type >-> TermCat.type.
+Canonical termCatType.
+Coercion prodCatType : type >-> ProdCat.type.
+Canonical prodCatType.
+Coercion cartCatType : type >-> CartCat.type.
+Canonical cartCatType.
+Notation ccCatType := type.
+Notation CCCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
+End Exports.
+
+End CCCat.
+
+Export CCCat.Exports.
+
+Section CCCatTheory.
+
+Variable C : ccCatType.
+
+Definition exp (X Y : C) :=
+  CCCat.exp (CCCat.mixin (CCCat.class C)) X Y.
+Local Notation "X ⇒ Y" := (exp X Y)
+  (at level 25, right associativity).
+Definition curry (X Y Z : C) (f : C (X × Y) Z) : C X (Y ⇒ Z) :=
+  CCCat.curry (CCCat.mixin (CCCat.class C)) f.
+Local Notation "'λ' f" := (curry f) (at level 0).
+Definition eval (X Y : C) : C ((X ⇒ Y) × X) Y :=
+  CCCat.eval (CCCat.mixin (CCCat.class C)).
+Arguments eval {_ _}.
+
+Definition uncurry X Y Z (f : C X (Y ⇒ Z)) : C (X × Y) Z :=
+  eval ∘ ⟨f ∘ 'π1, 'π2⟩.
+
+Lemma curryK X Y Z (f : C (X × Y) Z) : uncurry λ f = f.
+Proof.
+by rewrite /uncurry /= /exp /curry /eval; case: (CCCat.mixin _)=> /=.
+Qed.
+
+Lemma uncurryK X Y Z (f : C X (Y ⇒ Z)) : λ (uncurry f) = f.
+Proof.
+by move: f; rewrite /uncurry /= /exp /curry /eval; case: (CCCat.mixin _)=> /=.
+Qed.
+
+End CCCatTheory.
 
 Definition const (T S : Type) (x : S) (y : T) := x.
 
@@ -1272,40 +1358,6 @@ Proof. move=> x y xy; split=> /=; exact: monoP. Qed.
 Definition mono_pairf (R : poType) f g : {mono R -> T * S} :=
   Sub (pairf _ _) (monotone_pairf f g).
 Canonical mono_pairf.
-
-Lemma monotone_uncurry (R : poType) (f : {mono T -> {mono S -> R}}) :
-  monotone (uncurry (mono_val' ∘ f)).
-Proof.
-case=> [x1 y1] [x2 y2] [/= x12 y12]; rewrite /uncurry /=.
-apply: transitivity (monoP (f x2) y12); exact: (monoP f).
-Qed.
-
-Definition mono_uncurry (R : poType) (f : {mono T -> {mono S -> R}}) :
-  {mono T * S -> R} :=
-  Sub (uncurry (mono_val' ∘ f)) (@monotone_uncurry _ f).
-Canonical mono_uncurry.
-
-Lemma monotone1_curry (R : poType) (f : {mono T * S -> R}) (x : T) :
-  monotone (curry f x).
-Proof.
-by move=> y1 y2 y12; apply: monoP; split; first reflexivity.
-Qed.
-
-Definition mono1_curry (R : poType) (f : {mono T * S -> R}) (x : T) :
-  {mono S -> R} :=
-  Mono (monotone1_curry f x).
-Canonical mono1_curry.
-
-Lemma monotone_curry (R : poType) (f : {mono T * S -> R}) :
-  monotone (mono1_curry f).
-Proof.
-by move=> x1 x2 x12 y /=; rewrite /curry; apply: monoP; split; last reflexivity.
-Qed.
-
-Definition mono_curry (R : poType) (f : {mono T * S -> R}) :
-  {mono T -> {mono S -> R}} :=
-  Mono (monotone_curry f).
-Canonical mono_curry.
 
 End ProdPo.
 
