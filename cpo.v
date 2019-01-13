@@ -455,6 +455,8 @@ Export ProdCat.Exports.
 
 Section ProdCatTheory.
 
+Set Universe Polymorphism.
+
 Variable C : prodCatType.
 
 Definition cat_prod (X Y : C) : C :=
@@ -510,6 +512,8 @@ move=> [X1 Y1] [X2 Y2] [X3 Y3] [/= f1 g1] [/= f2 g2]; rewrite /prod_fmap /=.
 by rewrite comp_pair -![in RHS]compA pairKL pairKR !compA.
 Qed.
 
+Unset Universe Polymorphism.
+
 End ProdCatTheory.
 
 Notation "X × Y" := (cat_prod X Y)
@@ -530,7 +534,7 @@ Record class_of C (hom : C -> C -> Type) := Class {
   prod_mixin : ProdCat.mixin_of (Cat.Pack base)
 }.
 
-Record type :=
+Polymorphic Record type :=
   Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
