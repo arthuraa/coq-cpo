@@ -151,6 +151,48 @@ Notation "1" := (@cat_id _ _) : cat_scope.
 
 Open Scope cat_scope.
 
+Section DiscCat.
+
+Variable T : Type.
+
+Definition disc_obj := T.
+Definition disc_hom (x y : T) := x = y.
+Definition disc_id (x : T) : disc_hom x x := erefl.
+Definition disc_comp (x y z : T)
+                     (f : disc_hom y z) (g : disc_hom x y) : disc_hom x z :=
+  etrans g f.
+
+Lemma disc_compP : Cat.axioms disc_comp disc_id.
+Proof.
+split=> //.
+- by move=> X Y f; case: Y / f.
+- by move=> A B C D h g f; case: D / h.
+Qed.
+
+Definition disc_catMixin := CatMixin disc_compP.
+Canonical disc_catType :=
+  Eval hnf in CatType disc_obj disc_hom disc_catMixin.
+
+End DiscCat.
+
+Section IndiscCat.
+
+Variable T : Type.
+
+Definition indisc_obj := T.
+Definition indisc_hom (_ _ : T) := unit.
+Definition indisc_id (_ : T) := tt.
+Definition indisc_comp (_ _ _ : T) (x y : unit) := tt.
+
+Lemma indisc_compP : Cat.axioms indisc_comp indisc_id.
+Proof. by rewrite /indisc_comp /indisc_id; split=> // ?? []. Qed.
+
+Definition indisc_catMixin := CatMixin indisc_compP.
+Canonical indisc_catType :=
+  Eval hnf in CatType indisc_obj indisc_hom indisc_catMixin.
+
+End IndiscCat.
+
 Section FunCat.
 
 Definition sfun_catMixin :=
