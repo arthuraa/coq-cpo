@@ -10,6 +10,8 @@ Open Scope string_scope.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+Set Polymorphic Inductive Cumulativity.
+Unset Universe Minimization ToSet.
 
 (* TODO:
 
@@ -206,9 +208,9 @@ End FunCat.
 
 Section Functor.
 
-Variables C D : catType.
+Polymorphic Variables C D : catType.
 
-Record functor := Functor {
+Polymorphic Record functor := Functor {
   fobj  :> C -> D;
   fmap  :  forall X Y, C X Y -> D (fobj X) (fobj Y);
   fmap1 :  forall X, fmap 1 = 1 :> D (fobj X) (fobj X);
@@ -216,12 +218,12 @@ Record functor := Functor {
              fmap (f ∘ g) = fmap f ∘ fmap g
 }.
 
-Definition functor_of of phant (C -> D) := functor.
-Identity Coercion functor_of_functor : functor_of >-> functor.
+Polymorphic Definition functor_of of phant (C -> D) := functor.
+Polymorphic Identity Coercion functor_of_functor : functor_of >-> functor.
 Notation "{ 'functor' T }" := (functor_of (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 
-Lemma eq_functor F G :
+Polymorphic Lemma eq_functor F G :
   Tagged (fun F => forall X Y, C X Y -> D (F X) (F Y)) (fmap F) =
   Tagged (fun F => forall X Y, C X Y -> D (F X) (F Y)) (fmap G) ->
   F = G.
@@ -235,27 +237,28 @@ Qed.
 End Functor.
 
 Arguments fmap {_ _} _ {_ _}.
+Arguments Functor {_ _} _ _ _ _.
 Notation "{ 'functor' T }" := (functor_of (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 
 Section CatCat.
 
-Definition functor_id (C : catType) : {functor C -> C} :=
+Polymorphic Definition functor_id (C : catType) : {functor C -> C} :=
   @Functor C C id (fun _ _ => id) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
 
-Program Definition functor_comp (C D E : catType)
+Polymorphic Program Definition functor_comp (C D E : catType)
                         (F : {functor D -> E}) (G : {functor C -> D})
   : {functor C -> E} :=
-  @Functor C E (F \o G) (fun _ _ => fmap F \o fmap G) _ _.
+  Functor (fun X => F (G X)) (fun _ _ f => fmap F (fmap G f)) _ _.
 
 Next Obligation. by move=> C D E F G X /=; rewrite !fmap1. Qed.
 Next Obligation. by move=> C D E F G X Y Z f g /=; rewrite !fmapD. Qed.
 
-Lemma functor_compP : Cat.axioms (@functor_comp) (@functor_id).
+Polymorphic Lemma functor_compP : Cat.axioms (@functor_comp) (@functor_id).
 Proof. split; by move=> *; apply: eq_functor. Qed.
 
-Definition cat_catMixin := CatMixin functor_compP.
-Canonical cat_catType :=
+Polymorphic Definition cat_catMixin := CatMixin functor_compP.
+Polymorphic Canonical cat_catType :=
   Eval hnf in CatType catType functor cat_catMixin.
 
 End CatCat.
@@ -353,6 +356,28 @@ End TermCatTheory.
 Local Notation "'!" := (bang _) (at level 0) : cat_scope.
 Local Notation "''!_' X" := (bang X)
   (at level 0, X at level 9, format "''!_' X") : cat_scope.
+
+Section TermCatCat.
+
+Definition cat_term : catType := indisc_catType unit.
+Definition cat_bang (C : catType) : {functor C -> cat_term} :=
+  @Functor _ cat_term (fun _ => tt) (fun _ _ _ => tt)
+           (fun _ => erefl) (fun _ _ _ _ _ => erefl).
+
+Lemma cat_bangP (C : catType) (F : {functor C -> cat_term}) : F = cat_bang _.
+Proof.
+case: F=> F0 F1 H1 H2; apply: eq_functor=> /= {H1 H2}.
+move: F1; have -> : F0 = fun _ => tt.
+  by apply: functional_extensionality=> x; case: (F0 x).
+move=> F1; congr Tagged; do 3![apply: functional_extensionality_dep=> ?].
+by case: (F1 _ _ _).
+Qed.
+
+Definition cat_termCatMixin := TermCatMixin cat_bangP.
+Canonical cat_termCatType :=
+  Eval hnf in TermCatType catType functor cat_termCatMixin.
+
+End TermCatCat.
 
 Module ProdCat.
 
