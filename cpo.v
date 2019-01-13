@@ -52,10 +52,23 @@ Definition sfun T S := T -> S.
 
 Definition flip T S (R : T -> S -> Type) (f : forall x y, R x y) y x := f x y.
 
-Definition pairf T S R (f : R -> T) (g : R -> S) x := (f x, g x).
-
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
+
+Set Primitive Projections.
+Polymorphic Record prod T S := pair {
+  fst : T; snd : S
+}.
+Unset Primitive Projections.
+
+Notation "T * S" := (prod T S) : type_scope.
+Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
+Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
+Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
+
+Arguments fst {_ _} _.
+Arguments snd {_ _} _.
+Polymorphic Definition pairf T S R (f : R -> T) (g : R -> S) x := (f x, g x).
 
 Section Casts.
 
@@ -125,26 +138,26 @@ Export Cat.Exports.
 
 Section CatTheory.
 
-Variable C : catType.
+Polymorphic Variable C : catType.
 
-Definition comp := @Cat.comp _ _ (@Cat.class C).
-Definition cat_id := @Cat.id _ _ (@Cat.class C).
+Polymorphic Definition comp := @Cat.comp _ _ (@Cat.class C).
+Polymorphic Definition cat_id := @Cat.id _ _ (@Cat.class C).
 Arguments cat_id {_}.
 
 Local Notation "g ∘ f" := (comp g f).
 Local Notation "1" := cat_id.
 
-Lemma comp1f X Y (f : C X Y) : 1 ∘ f = f.
+Polymorphic Lemma comp1f X Y (f : C X Y) : 1 ∘ f = f.
 Proof. by rewrite /comp /cat_id; case: (@Cat.class C)=> ?? []. Qed.
 
-Lemma compf1 X Y (f : C X Y) : f ∘ 1 = f.
+Polymorphic Lemma compf1 X Y (f : C X Y) : f ∘ 1 = f.
 Proof. by rewrite /comp /cat_id; case: (@Cat.class C)=> ?? []. Qed.
 
-Lemma compA X Y Z W (h : C Z W) (g : C Y Z) (f : C X Y) :
+Polymorphic Lemma compA X Y Z W (h : C Z W) (g : C Y Z) (f : C X Y) :
   h ∘ (g ∘ f) = h ∘ g ∘ f.
 Proof. by rewrite /comp; case: (@Cat.class C)=> ?? []. Qed.
 
-Definition compp X Y Z (p : C Y Z * C X Y) : C X Z := p.1 ∘ p.2.
+Polymorphic Definition compp X Y Z (p : C Y Z * C X Y) : C X Z := p.1 ∘ p.2.
 
 End CatTheory.
 
@@ -197,12 +210,17 @@ End IndiscCat.
 
 Section FunCat.
 
-Definition sfun_catMixin :=
+Polymorphic Definition sfun_catMixin :=
   @CatMixin Type sfun (fun _ _ _ f g x => f (g x)) (fun _ x => x)
             (And3 (fun _ _ _ => erefl) (fun _ _ _ => erefl)
                   (fun _ _ _ _ _ _ _ => erefl)).
 
-Canonical Fun := CatType Type sfun sfun_catMixin.
+Polymorphic Canonical Fun := CatType Type sfun sfun_catMixin.
+
+Polymorphic Lemma fun_compE (T S R : Type)
+  (f : sfun S R) (g : sfun T S) (x : T)
+  : (f ∘ g) x = f (g x).
+Proof. by []. Qed.
 
 End FunCat.
 
@@ -1132,6 +1150,11 @@ Proof. by apply: val_inj. Qed.
 Definition mono_catMixin := CatMixin (And3 mono_comp1f mono_compf1 mono_compA).
 Canonical mono_catType := CatType poType mono mono_catMixin.
 
+Lemma mono_compE (T S R : poType)
+  (f : {mono S -> R}) (g : {mono T -> S}) (x : T)
+  : (f ∘ g) x = f (g x).
+Proof. by []. Qed.
+
 Lemma monotone_cast T (S : T -> poType) (x y : T) (e : x = y) : monotone (cast S e).
 Proof. by case: y / e. Qed.
 
@@ -1386,6 +1409,8 @@ Qed.
 
 Section ProdPo.
 
+Set Universe Polymorphism.
+
 Variables T S : poType.
 
 Definition prod_appr (x y : T * S) :=
@@ -1408,14 +1433,14 @@ Lemma monotone_fst : monotone (@fst T S).
 Proof. by case=> [??] [??] []. Qed.
 
 Definition mono_fst : {mono T * S -> T} :=
-  Eval hnf in Sub (@fst T S) monotone_fst.
+  Eval hnf in Sub fst monotone_fst.
 Canonical mono_fst.
 
 Lemma monotone_snd : monotone (@snd T S).
 Proof. by case=> [??] [??] []. Qed.
 
 Definition mono_snd : {mono T * S -> S} :=
-  Eval hnf in Sub (@snd T S) monotone_snd.
+  Eval hnf in Sub snd monotone_snd.
 Canonical mono_snd.
 
 Lemma monotone_pairf (R : poType) (f : {mono R -> T}) (g : {mono R -> S}) :
@@ -1426,20 +1451,25 @@ Definition mono_pairf (R : poType) f g : {mono R -> T * S} :=
   Sub (pairf _ _) (monotone_pairf f g).
 Canonical mono_pairf.
 
+Unset Universe Polymorphism.
+
 End ProdPo.
 
 Arguments mono_fst {_ _}.
 Arguments mono_snd {_ _}.
 Arguments mono_pairf {_ _ _}.
 
-Lemma monotone_mono_compp (X Y Z : poType) : monotone (@compp _ X Y Z).
+Variables X Y Z : poType.
+
+Lemma monotone_mono_compp (X Y Z : poType) :
+  @monotone [poType of mono_catType Y Z * mono_catType X Y] _ (@compp _ X Y Z).
 Proof.
 move=> [x1 y1] [x2 y2] [/= x12 y12]; exact: monotone_mono_comp.
 Qed.
 
 Definition mono_compp (X Y Z : poType) :
   {mono {mono Y -> Z} * {mono X -> Y} -> {mono X -> Z}} :=
-  Sub (@compp _ X Y Z) (@monotone_mono_compp X Y Z).
+  Mono (@monotone_mono_compp X Y Z).
 Canonical mono_compp.
 Arguments mono_compp {_ _ _}.
 
@@ -2127,18 +2157,24 @@ Proof. by apply: val_inj; rewrite /= comp1f. Qed.
 Definition cont_catMixin := CatMixin (And3 cont_comp1f cont_compf1 cont_compA).
 Canonical cont_catType := Eval hnf in CatType cpoType cont cont_catMixin.
 
+Lemma cont_compE (T S R : cpoType)
+  (f : {cont S -> R}) (g : {cont T -> S}) (x : T)
+  : (f ∘ g) x = f (g x).
+Proof. by []. Qed.
+
 Lemma monotone_cont_comp (T S R : cpoType) (f1 f2 : {cont S -> R}) (g1 g2 : {cont T -> S}) :
   f1 ⊑ f2 -> g1 ⊑ g2 -> f1 ∘ g1 ⊑ f2 ∘ g2.
 Proof. exact: monotone_mono_comp. Qed.
 
-Lemma monotone_cont_compp (T S R : cpoType) : monotone (@compp _ T S R).
+Lemma monotone_cont_compp (T S R : cpoType) :
+  @monotone [poType of cont_catType S R * cont_catType T S] _ (@compp _ T S R).
 Proof.
 move=> [x1 y1] [x2 y2] [/= x11 y12]; exact: monotone_cont_comp.
 Qed.
 
 Definition mono_cont_compp (T S R : cpoType) :
   {mono {cont S -> R} * {cont T -> S} -> {cont T -> R}} :=
-  Sub (@compp _ T S R) (@monotone_cont_compp T S R).
+  Mono (@monotone_cont_compp T S R).
 Canonical mono_cont_compp.
 Arguments mono_cont_compp {_ _ _}.
 
@@ -2236,11 +2272,11 @@ apply: sup_unique; split.
   by split.
 move=> y ub_y; rewrite cont_f1.
 case: (supP (f ∘ mono_pairf (mono_fst ∘ x) (mono_const _ (sup (mono_snd ∘ x))))).
-move=> _; apply=> n; rewrite /= /pairf /const /= cont_f2.
+move=> _; apply=> n; rewrite /=; unfold pairf; rewrite /const /= cont_f2.
 case: (supP (f ∘ mono_pairf (mono_const _ (x n).1) (mono_snd ∘ x))).
-move=> _; apply=> m; rewrite /= /pairf /const /=.
-apply: transitivity (ub_y (maxn n m)); apply: monoP; split=> /=;
-apply: monoP; apply: monoP; [exact: leq_maxl|exact: leq_maxr].
+move=> _; apply=> m; rewrite /=; unfold pairf; rewrite /const /=.
+by apply: transitivity (ub_y (maxn n m)); apply: monoP; split=> /=;
+apply monoP; apply: monoP; [exact: leq_maxl|exact: leq_maxr].
 Qed.
 
 End ProdCpo.
@@ -2568,24 +2604,24 @@ Lemma retractionA (T S : cpoType) (p : {cont T -> S}) (e : {cont S -> T}) x y :
   retraction p e -> e x ⊑ y <-> x ⊑ p y.
 Proof.
 case=> eK pD; split.
-- by move=> /(valP (val p)); rewrite /= -[p (e x)]/((p ∘ e) x) eK /=.
-- by move=> /(valP (val e)) /= H; apply: transitivity H (pD _).
+- by move=> /(monoP p); rewrite /= -cont_compE eK.
+- by move=> /(monoP e) /= H; apply: transitivity H (pD _).
 Qed.
 
 Lemma embedding_iso (T S : cpoType) (p : {cont T -> S}) (e : {cont S -> T}) x y :
   retraction p e -> e x ⊑ e y -> x ⊑ y.
 Proof.
-by case=> eK _ /(valP (val p)); rewrite /= -2![p (e _)]/((p ∘ e) _) eK.
+by case=> eK _ /(monoP p); rewrite /= -2!cont_compE eK.
 Qed.
 
 Lemma embedding_unique (T S : cpoType) (p : {cont T -> S}) (e1 e2 : {cont S -> T}) :
   retraction p e1 -> retraction p e2 -> e1 = e2.
 Proof.
 move=> e1P e2P; apply: appr_anti.
-- rewrite -[e1]compf1 -[e2]comp1f -e2P.1 compA.
-  apply: monotone_cont_comp; [apply: e1P.2|reflexivity].
-- rewrite -[e2]compf1 -[e1]comp1f -e1P.1 compA.
-  apply: monotone_cont_comp; [apply: e2P.2|reflexivity].
+- rewrite -[e1]compf1 -[e2]comp1f -(proj1 e2P) compA.
+  apply: monotone_cont_comp; [apply: (proj2 e1P)|reflexivity].
+- rewrite -[e2]compf1 -[e1]comp1f -(proj1 e1P) compA.
+  apply: monotone_cont_comp; [apply: (proj2 e2P)|reflexivity].
 Qed.
 
 Definition retr_retr (T S : cpoType) (p : retr T S) : {cont T -> S} :=
@@ -2618,11 +2654,11 @@ Variables T S R : cpoType.
 
 Lemma embK (p : {retr T -> S}) : cancel p^e p.
 Proof.
-by move=> x; rewrite -[p (p^e x)]/((retr_retr p ∘ p^e) x) (retrP p).1.
+by move=> x; rewrite -cont_compE (proj1 (retrP p)).
 Qed.
 
 Lemma retrD (p : {retr T -> S}) x : p^e (p x) ⊑ x.
-Proof. exact: (retrP p).2. Qed.
+Proof. exact: (proj2 (retrP p)). Qed.
 
 Lemma retrA (p : {retr T -> S}) x y : p^e x ⊑ y <-> x ⊑ p y.
 Proof. by apply: retractionA; apply: retrP. Qed.
@@ -2640,9 +2676,9 @@ Lemma retraction_comp (p1 : {cont S -> R}) (e1 : {cont R -> S})
   retraction p1 e1 -> retraction p2 e2 -> retraction (p1 ∘ p2) (e2 ∘ e1).
 Proof.
 move=> [e1K p1D] [e2K p2D]; split.
-  by rewrite -compA [p2 ∘ _]compA e2K comp1f e1K.
+  by rewrite -compA (compA p2) e2K comp1f e1K.
 apply: transitivity p2D.
-rewrite -{2}[p2]comp1f -compA [e1 ∘ _]compA.
+rewrite -{2}[p2]comp1f -compA (compA e1).
 apply: monotone_cont_comp; first reflexivity.
 apply: monotone_cont_comp; by [|reflexivity].
 Qed.
@@ -2965,9 +3001,9 @@ Definition chain_mor0 : {retr 'X_1 -> 'X_0} :=
 Lemma f_emb_proof (T S : cpoType) (f : {retr T -> S}) :
   retraction (f_mor F (f^e, retr_retr f)) (f_mor F (retr_retr f, f^e)).
 Proof.
-split; rewrite -f_morD; first by rewrite (retrP f).1 f_mor1.
+split; rewrite -f_morD; first by rewrite (proj1 (retrP f)) f_mor1.
 rewrite -f_mor1; apply: (valP (val (f_mor F))); split;
-exact: (retrP f).2.
+exact: (proj2 (retrP f)).
 Qed.
 
 Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F T T -> F S S} :=
@@ -3083,7 +3119,7 @@ Lemma rollK : unroll ∘ cont_roll = 1.
 Proof.
 rewrite /unroll continuous_cont_compL /= -[RHS]f_mor1 /= -sup_proj.
 rewrite -sup_pairf -contP -(sup_shift _ 1); congr sup; apply/eq_mono=> /= n /=.
-apply/eq_cont=> x /=; rewrite /outlim /pairf /=.
+apply/eq_cont=> x /=; rewrite /outlim; unfold pairf; simpl.
 by rewrite /f_emb /= /proj f_morD.
 Qed.
 
