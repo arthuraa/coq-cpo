@@ -100,22 +100,47 @@ Reserved Notation "g ∘ f" (at level 20, left associativity).
 
 Module Cat.
 
-Section ClassDef.
+Section WithUniverse.
 
 Universe i.
 
-Definition axioms (T : Type@{i}) (hom : T -> T -> Type@{i})
-  (comp : forall {A B C}, hom B C -> hom A B -> hom A C)
-  (id   : forall {A}, hom A A) :=
-  [/\ (forall A B (f : hom A B), comp id f = f),
-      (forall A B (f : hom A B), comp f id = f) &
-      (forall A B C D (h : hom C D) (g : hom B C) (f : hom A B),
-         comp h (comp g f) = comp (comp h g) f)].
+Section ClassDef.
+
+Variable T : Type@{i}.
+Variable hom : T -> T -> Type@{i}.
+Variable comp : forall X Y Z, hom Y Z -> hom X Y -> hom X Z.
+Variable id : forall X, hom X X.
+Arguments id {_}.
+
+Definition axioms :=
+  [/\ (forall X Y (f : hom X Y), comp id f = f),
+      (forall X Y (f : hom X Y), comp f id = f) &
+      (forall X Y Z W (h : hom Z W) (g : hom Y Z) (f : hom X Y),
+          comp h (comp g f) = comp (comp h g) f)].
+
+Set Primitive Projections.
+
+(** We add a symmetric version of the associativity axiom so that
+    taking opposites is an involution definitionally. *)
+
+Record axioms_ := Axioms_ {
+  comp1f : forall X Y (f : hom X Y), comp id f = f;
+  compf1 : forall X Y (f : hom X Y), comp f id = f;
+  compA  : forall X Y Z W (h : hom Z W) (g : hom Y Z) (f : hom X Y),
+             comp h (comp g f) = comp (comp h g) f;
+  compAV : forall X Y Z W (h : hom Z W) (g : hom Y Z) (f : hom X Y),
+             comp (comp h g) f = comp h (comp g f)
+}.
+
+Lemma pack_axioms : axioms -> axioms_.
+Proof. by case=> H1 H2 H3; split. Qed.
+
+End ClassDef.
 
 Record mixin_of (T : Type@{i}) (hom : T -> T -> Type@{i}) := Mixin {
-  comp : forall A B C, hom B C -> hom A B -> hom A C;
-  id   : forall A, hom A A;
-  _    : axioms comp id
+  comp  : forall X Y Z, hom Y Z -> hom X Y -> hom X Z;
+  id    : forall X, hom X X;
+  compP : axioms_ comp id
 }.
 
 Notation class_of := mixin_of (only parsing).
@@ -123,22 +148,23 @@ Notation class_of := mixin_of (only parsing).
 Record type : Type := Pack {
   obj : Type@{i};
   hom : obj -> obj -> Type@{i};
-   _ : mixin_of hom
+  class : mixin_of hom
 }.
 Local Coercion obj : type >-> Sortclass.
 Variables (T : Type@{i}) (cT : type).
-Definition class := let: Pack _ _ c as cT' := cT return class_of (@hom cT') in c.
 Definition clone h c of phant_id class c := @Pack T h c.
 Let xT := let: Pack T _ _ := cT in T.
 Notation xclass := (class : class_of xT).
 
-End ClassDef.
+Unset Primitive Projections.
+
+End WithUniverse.
 
 Module Exports.
 Coercion obj : type >-> Sortclass.
 Coercion hom : type >-> Funclass.
 Notation catType := type.
-Notation CatMixin := Mixin.
+Notation CatMixin a := (Mixin (pack_axioms a)).
 Notation CatType T h m := (@Pack T h m).
 End Exports.
 
@@ -177,6 +203,40 @@ Notation "g ∘ f" := (comp g f) : cat_scope.
 Notation "1" := (@cat_id _ _) : cat_scope.
 
 Open Scope cat_scope.
+
+Section Opposite.
+
+Universe i.
+
+Variable C : catType@{i}.
+
+Definition op_obj := Cat.obj C.
+Definition op_hom X Y := C Y X.
+Definition op_comp X Y Z (f : op_hom Y Z) (g : op_hom X Y) : op_hom X Z :=
+  g ∘ f.
+Definition op_id X : op_hom X X := 1.
+
+Definition op_catMixin :=
+  @Cat.Mixin op_obj op_hom op_comp op_id
+             (Cat.Axioms_
+                (fun X Y =>
+                     @Cat.compf1 _ _ _ _ (Cat.compP (Cat.class C)) Y X)
+                (fun X Y =>
+                   @Cat.comp1f _ _ _ _ (Cat.compP (Cat.class C)) Y X)
+                (fun X Y Z W h g f =>
+                   @Cat.compAV _ _ _ _ (Cat.compP (Cat.class C))
+                               W Z Y X f g h)
+                (fun X Y Z W h g f =>
+                   @Cat.compA  _ _ _ _ (Cat.compP (Cat.class C))
+                               W Z Y X f g h)).
+
+Canonical op_catType :=
+  CatType op_obj op_hom op_catMixin.
+
+End Opposite.
+
+Notation "C '^op'" := (op_catType C)
+  (at level 2, left associativity, format "C ^op") : cat_scope.
 
 Section DiscCat.
 
@@ -229,14 +289,17 @@ Section FunCat.
 Universe i j.
 
 Definition sfun_catMixin :=
-  @CatMixin@{j}
-           Type@{i} sfun@{i} (fun _ _ _ f g x => f (g x)) (fun _ x => x)
-           (And3 (fun _ _ _ => erefl) (fun _ _ _ => erefl)
-                 (fun _ _ _ _ _ _ _ => erefl)).
+  @Cat.Mixin@{j}
+     Type@{i} sfun@{i} (fun _ _ _ f g x => f (g x)) (fun _ x => x)
+     (@Cat.Axioms_
+        Type@{i} sfun@{i} (fun _ _ _ f g x => f (g x)) (fun _ x => x)
+        (fun _ _ _ => erefl) (fun _ _ _ => erefl)
+        (fun _ _ _ _ _ _ _ => erefl) (fun _ _ _ _ _ _ _ => erefl)).
 
 Canonical Fun := CatType Type sfun sfun_catMixin.
 
-Lemma fun_compE (T S R : Type) (f : sfun S R) (g : sfun T S) (x : T) : (f ∘ g) x = f (g x).
+Lemma fun_compE (T S R : Type) (f : sfun S R) (g : sfun T S) (x : T) :
+  (f ∘ g) x = f (g x).
 Proof. by []. Qed.
 
 End FunCat.
@@ -276,7 +339,7 @@ End Functor.
 
 Arguments fmap {_ _} _ {_ _}.
 Arguments Functor {_ _} _ _ _ _.
-Notation "{ 'functor' T }" := (functor_of (Phant T))
+Notation "{ 'functor' T }" := (functor_of _ _ (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 
 Section CatCat.
@@ -294,7 +357,7 @@ Program Definition functor_comp (C D E : catType@{i})
 Next Obligation. by move=> C D E F G X /=; rewrite !fmap1. Qed.
 Next Obligation. by move=> C D E F G X Y Z f g /=; rewrite !fmapD. Qed.
 
-Lemma functor_compP : Cat.axioms@{j} (@functor_comp) (@functor_id).
+Lemma functor_compP : Cat.axioms@{j} functor_comp functor_id.
 Proof. split; by move=> *; apply/eq_functor. Qed.
 
 Definition cat_catMixin := CatMixin functor_compP.
@@ -419,7 +482,7 @@ Proof.
 case: F=> F0 F1 H1 H2; apply/eq_functor=> /= {H1 H2}.
 move: F1; have -> : F0 = fun _ => tt.
   by apply: functional_extensionality=> x; case: (F0 x).
-move=> F1; congr Tagged; do 3![apply: functional_extensionality_dep=> ?].
+move=> F1; f_equal; do 3![apply: functional_extensionality_dep=> ?].
 by case: (F1 _ _ _).
 Qed.
 
