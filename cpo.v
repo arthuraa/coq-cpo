@@ -58,7 +58,7 @@ Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
 Set Primitive Projections.
-Polymorphic Record prod@{i} (T S : Type@{i}) := pair {
+Record prod@{i} (T S : Type@{i}) := pair {
   fst : T; snd : S
 }.
 Unset Primitive Projections.
@@ -69,7 +69,8 @@ Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
 
 Arguments fst {_ _} _.
 Arguments snd {_ _} _.
-Polymorphic Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x := (f x, g x).
+Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x :=
+  (f x, g x).
 
 Section Casts.
 
