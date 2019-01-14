@@ -10,9 +10,6 @@ Open Scope string_scope.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
-Set Polymorphic Inductive Cumulativity.
-Unset Universe Minimization ToSet.
-
 (* TODO:
 
 - Test whether wrapping functions in a definition helps with canonical structure
@@ -29,9 +26,23 @@ Unset Universe Minimization ToSet.
 *)
 
 Obligation Tactic := idtac.
-Definition phant_id_err {T1 T2} (t1 : T1) (t2 : T2) (s : string) :=
+
+Universe phant.
+
+Section Unification.
+
+Variant phantom (T : Type@{phant}) (p : T) : Prop := Phantom.
+Arguments phantom : clear implicits.
+Arguments Phantom : clear implicits.
+Definition phant_id (T1 T2 : Type@{phant}) v1 v2 : Prop :=
+  phantom T1 v1 -> phantom T2 v2.
+
+Definition phant_id_err {T1 T2 : Type@{phant}} t1 t2 (s : string) : Prop :=
   phantom T1 t1 -> phantom T2 t2.
-Definition unify {T} {t : T} (x : phantom T t) := x.
+Definition unify {T : Type@{phant}} {t : T} (x : phantom T t) := x.
+
+End Unification.
+
 Notation "[ 'find' v | t1 ~ t2 ] rest" :=
   (fun v (_ : phant_id t1 t2) => rest)
   (at level 0, v ident, rest at level 10, right associativity) : form_scope.
@@ -47,20 +58,24 @@ Notation "[ 'find' v : T | t1 ~ t2 | msg ] rest" :=
 Notation "’Error: t msg" := (phant_id_err _ t msg)
   (at level 0) : form_scope.
 
-Definition dfun T (S : T -> Type) := forall x, S x.
-Definition sfun T S := T -> S.
+Set Universe Polymorphism.
+Set Polymorphic Inductive Cumulativity.
+Unset Universe Minimization ToSet.
 
-Definition flip T S (R : T -> S -> Type) (f : forall x y, R x y) y x := f x y.
+Definition dfun T (S : T -> Type) := forall x, S x.
+Polymorphic Definition sfun@{i} (T S : Type@{i}) : Type@{i} := T -> S.
+
+Polymorphic Definition flip@{i} (T S : Type@{i}) (R : T -> S -> Type@{i})
+  (f : forall x y, R x y) y x := f x y.
 
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
 Identity Coercion fun_of_sfun : sfun >-> Funclass.
 
 Set Primitive Projections.
-Polymorphic Record prod T S := pair {
+Polymorphic Record prod@{i} (T S : Type@{i}) := pair {
   fst : T; snd : S
 }.
 Unset Primitive Projections.
-
 Notation "T * S" := (prod T S) : type_scope.
 Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
 Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
@@ -68,11 +83,13 @@ Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
 
 Arguments fst {_ _} _.
 Arguments snd {_ _} _.
-Polymorphic Definition pairf T S R (f : R -> T) (g : R -> S) x := (f x, g x).
+Polymorphic Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x := (f x, g x).
 
 Section Casts.
 
-Variable (T : Type).
+Universe i.
+
+Variable (T : Type@{i}).
 Implicit Types (x y z : T).
 
 Definition cast (P : T -> Type) x y (e : x = y) : P x -> P y :=
@@ -96,7 +113,11 @@ Reserved Notation "g ∘ f" (at level 20, left associativity).
 
 Module Cat.
 
-Definition axioms T (hom : T -> T -> Type)
+Section ClassDef.
+
+Universe i.
+
+Definition axioms (T : Type@{i}) (hom : T -> T -> Type@{i})
   (comp : forall {A B C}, hom B C -> hom A B -> hom A C)
   (id   : forall {A}, hom A A) :=
   [/\ (forall A B (f : hom A B), comp id f = f),
@@ -104,9 +125,7 @@ Definition axioms T (hom : T -> T -> Type)
       (forall A B C D (h : hom C D) (g : hom B C) (f : hom A B),
          comp h (comp g f) = comp (comp h g) f)].
 
-Section ClassDef.
-
-Record mixin_of T (hom : T -> T -> Type) := Mixin {
+Record mixin_of (T : Type@{i}) (hom : T -> T -> Type@{i}) := Mixin {
   comp : forall A B C, hom B C -> hom A B -> hom A C;
   id   : forall A, hom A A;
   _    : axioms comp id
@@ -114,9 +133,13 @@ Record mixin_of T (hom : T -> T -> Type) := Mixin {
 
 Notation class_of := mixin_of (only parsing).
 
-Polymorphic Record type := Pack {obj; hom : obj -> obj -> Type; _ : mixin_of hom}.
+Record type : Type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+   _ : mixin_of hom
+}.
 Local Coercion obj : type >-> Sortclass.
-Variables (T : Type) (cT : type).
+Variables (T : Type@{i}) (cT : type).
 Definition class := let: Pack _ _ c as cT' := cT return class_of (@hom cT') in c.
 Definition clone h c of phant_id class c := @Pack T h c.
 Let xT := let: Pack T _ _ := cT in T.
@@ -138,26 +161,28 @@ Export Cat.Exports.
 
 Section CatTheory.
 
-Polymorphic Variable C : catType.
+Universe i.
 
-Polymorphic Definition comp := @Cat.comp _ _ (@Cat.class C).
-Polymorphic Definition cat_id := @Cat.id _ _ (@Cat.class C).
+Variable C : catType@{i}.
+
+Definition comp := @Cat.comp _ _ (@Cat.class C).
+Definition cat_id := @Cat.id _ _ (@Cat.class C).
 Arguments cat_id {_}.
 
 Local Notation "g ∘ f" := (comp g f).
 Local Notation "1" := cat_id.
 
-Polymorphic Lemma comp1f X Y (f : C X Y) : 1 ∘ f = f.
+Lemma comp1f X Y (f : C X Y) : 1 ∘ f = f.
 Proof. by rewrite /comp /cat_id; case: (@Cat.class C)=> ?? []. Qed.
 
-Polymorphic Lemma compf1 X Y (f : C X Y) : f ∘ 1 = f.
+Lemma compf1 X Y (f : C X Y) : f ∘ 1 = f.
 Proof. by rewrite /comp /cat_id; case: (@Cat.class C)=> ?? []. Qed.
 
-Polymorphic Lemma compA X Y Z W (h : C Z W) (g : C Y Z) (f : C X Y) :
+Lemma compA X Y Z W (h : C Z W) (g : C Y Z) (f : C X Y) :
   h ∘ (g ∘ f) = h ∘ g ∘ f.
 Proof. by rewrite /comp; case: (@Cat.class C)=> ?? []. Qed.
 
-Polymorphic Definition compp X Y Z (p : C Y Z * C X Y) : C X Z := p.1 ∘ p.2.
+Definition compp X Y Z (p : C Y Z * C X Y) : C X Z := p.1 ∘ p.2.
 
 End CatTheory.
 
@@ -168,7 +193,9 @@ Open Scope cat_scope.
 
 Section DiscCat.
 
-Variable T : Type.
+Universe i.
+
+Variable T : Type@{i}.
 
 Definition disc_obj := T.
 Definition disc_hom (x y : T) := x = y.
@@ -192,7 +219,9 @@ End DiscCat.
 
 Section IndiscCat.
 
-Variable T : Type.
+Universe i.
+
+Variable T : Type@{i}.
 
 Definition indisc_obj := T.
 Definition indisc_hom (_ _ : T) := unit.
@@ -210,25 +239,28 @@ End IndiscCat.
 
 Section FunCat.
 
-Polymorphic Definition sfun_catMixin :=
-  @CatMixin Type sfun (fun _ _ _ f g x => f (g x)) (fun _ x => x)
-            (And3 (fun _ _ _ => erefl) (fun _ _ _ => erefl)
-                  (fun _ _ _ _ _ _ _ => erefl)).
+Universe i j.
 
-Polymorphic Canonical Fun := CatType Type sfun sfun_catMixin.
+Definition sfun_catMixin :=
+  @CatMixin@{j}
+           Type@{i} sfun@{i} (fun _ _ _ f g x => f (g x)) (fun _ x => x)
+           (And3 (fun _ _ _ => erefl) (fun _ _ _ => erefl)
+                 (fun _ _ _ _ _ _ _ => erefl)).
 
-Polymorphic Lemma fun_compE (T S R : Type)
-  (f : sfun S R) (g : sfun T S) (x : T)
-  : (f ∘ g) x = f (g x).
+Canonical Fun := CatType Type sfun sfun_catMixin.
+
+Lemma fun_compE (T S R : Type) (f : sfun S R) (g : sfun T S) (x : T) : (f ∘ g) x = f (g x).
 Proof. by []. Qed.
 
 End FunCat.
 
 Section Functor.
 
-Polymorphic Variables C D : catType.
+Universe i.
 
-Polymorphic Record functor := Functor {
+Variables C D : catType@{i}.
+
+Record functor := Functor {
   fobj  :> C -> D;
   fmap  :  forall X Y, C X Y -> D (fobj X) (fobj Y);
   fmap1 :  forall X, fmap 1 = 1 :> D (fobj X) (fobj X);
@@ -236,16 +268,17 @@ Polymorphic Record functor := Functor {
              fmap (f ∘ g) = fmap f ∘ fmap g
 }.
 
-Polymorphic Definition functor_of of phant (C -> D) := functor.
-Polymorphic Identity Coercion functor_of_functor : functor_of >-> functor.
+Definition functor_of of phant (C -> D) := functor.
+Identity Coercion functor_of_functor : functor_of >-> functor.
 Notation "{ 'functor' T }" := (functor_of (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 
-Polymorphic Lemma eq_functor F G :
+Lemma eq_functor F G :
   Tagged (fun F => forall X Y, C X Y -> D (F X) (F Y)) (fmap F) =
-  Tagged (fun F => forall X Y, C X Y -> D (F X) (F Y)) (fmap G) ->
+  Tagged (fun F => forall X Y, C X Y -> D (F X) (F Y)) (fmap G) <->
   F = G.
 Proof.
+split; last by move=> ->.
 case: F G=> [F0 F1 Fmap1 FmapD] [G0 G1 Gmap1 GmapD] /= e.
 move: {e} (congr1 _ e) (eq_tagged e)=> /= e0 e1.
 case: G0 / e0 G1 e1 Gmap1 GmapD => /= G1 e1; case: G1 / e1=> Gmap1 GmapD.
@@ -261,10 +294,12 @@ Notation "{ 'functor' T }" := (functor_of (Phant T))
 
 Section CatCat.
 
-Polymorphic Definition functor_id (C : catType) : {functor C -> C} :=
+Universe i j.
+
+Definition functor_id (C : catType@{i}) : {functor C -> C} :=
   @Functor C C id (fun _ _ => id) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
 
-Polymorphic Program Definition functor_comp (C D E : catType)
+Program Definition functor_comp (C D E : catType@{i})
                         (F : {functor D -> E}) (G : {functor C -> D})
   : {functor C -> E} :=
   Functor (fun X => F (G X)) (fun _ _ f => fmap F (fmap G f)) _ _.
@@ -272,18 +307,20 @@ Polymorphic Program Definition functor_comp (C D E : catType)
 Next Obligation. by move=> C D E F G X /=; rewrite !fmap1. Qed.
 Next Obligation. by move=> C D E F G X Y Z f g /=; rewrite !fmapD. Qed.
 
-Polymorphic Lemma functor_compP : Cat.axioms (@functor_comp) (@functor_id).
-Proof. split; by move=> *; apply: eq_functor. Qed.
+Lemma functor_compP : Cat.axioms@{j} (@functor_comp) (@functor_id).
+Proof. split; by move=> *; apply/eq_functor. Qed.
 
-Polymorphic Definition cat_catMixin := CatMixin functor_compP.
-Polymorphic Canonical cat_catType :=
+Definition cat_catMixin := CatMixin functor_compP.
+Canonical cat_catType :=
   Eval hnf in CatType catType functor cat_catMixin.
 
 End CatCat.
 
 Section ProdCatCat.
 
-Variables C D : catType.
+Universe i.
+
+Variables C D : catType@{i}.
 
 Definition prod_cat_hom (X Y : C * D) : Type := C X.1 Y.1 * D X.2 Y.2.
 Definition prod_cat_id (X : C * D) : prod_cat_hom X X := (1, 1).
@@ -308,29 +345,35 @@ End ProdCatCat.
 
 Module TermCat.
 
-Record mixin_of C (hom : C -> C -> Type) := Mixin {
+Section ClassDef.
+
+Universe i.
+
+Record mixin_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Mixin {
   term : C;
   bang : forall X, hom X term;
   _    : forall X (f : hom X term), f = bang X
 }.
 
-Record class_of C (hom : C -> C -> Type) :=
+Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) :=
   Class {base : Cat.mixin_of hom; mixin : mixin_of hom}.
 
-Section ClassDef.
-
-Polymorphic Record type := Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Record type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+   _ : class_of hom
+}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
-Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Variables (C0 : Type@{i}) (C1 : C0 -> C0 -> Type@{i}) (cC : type).
 Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
 Definition clone c of phant_id class c := @Pack C0 C1 c.
 
 Definition catType := @Cat.Pack _ _ class.
 
 Definition pack m :=
-  [find c | @Cat.hom c ~ C1 | "not a catType" ]
-  [find b | Cat.class c ~ b ]
+  [find c : Cat.type@{i} | @Cat.hom@{i} c ~ C1 | "not a catType" ]
+  [find b : Cat.mixin_of@{i} _ | Cat.class@{i} c ~ b ]
   @Pack C0 C1 (@Class _ _ b m).
 
 End ClassDef.
@@ -377,29 +420,36 @@ Local Notation "''!_' X" := (bang X)
 
 Section TermCatCat.
 
-Definition cat_term : catType := indisc_catType unit.
-Definition cat_bang (C : catType) : {functor C -> cat_term} :=
+Universe i j.
+
+Definition cat_term : catType@{i} := indisc_catType@{i} unit.
+Definition cat_bang (C : catType@{i}) : {functor C -> cat_term} :=
   @Functor _ cat_term (fun _ => tt) (fun _ _ _ => tt)
            (fun _ => erefl) (fun _ _ _ _ _ => erefl).
 
-Lemma cat_bangP (C : catType) (F : {functor C -> cat_term}) : F = cat_bang _.
+Lemma cat_bangP (C : catType@{i}) (F : {functor C -> cat_term}) : F = cat_bang _.
 Proof.
-case: F=> F0 F1 H1 H2; apply: eq_functor=> /= {H1 H2}.
+case: F=> F0 F1 H1 H2; apply/eq_functor=> /= {H1 H2}.
 move: F1; have -> : F0 = fun _ => tt.
   by apply: functional_extensionality=> x; case: (F0 x).
 move=> F1; congr Tagged; do 3![apply: functional_extensionality_dep=> ?].
 by case: (F1 _ _ _).
 Qed.
 
-Definition cat_termCatMixin := TermCatMixin cat_bangP.
-Canonical cat_termCatType :=
-  Eval hnf in TermCatType catType functor cat_termCatMixin.
+Definition cat_termCatMixin : TermCat.mixin_of@{j} _ := TermCatMixin cat_bangP.
+Canonical cat_termCatType : termCatType@{j} :=
+  @TermCat.Pack@{j} catType@{i} functor@{i}
+                    (TermCat.Class cat_catMixin@{i j} cat_termCatMixin).
 
 End TermCatCat.
 
 Module ProdCat.
 
-Record mixin_of (C : catType) := Mixin {
+Section ClassDef.
+
+Universe i.
+
+Record mixin_of (C : catType@{i}) := Mixin {
   prod  : C -> C -> C;
   pair  : forall X Y Z, C Z X -> C Z Y -> C Z (prod X Y);
   proj1 : forall X Y, C (prod X Y) X;
@@ -414,18 +464,20 @@ Record mixin_of (C : catType) := Mixin {
             f = g
 }.
 
-Section ClassDef.
-
-Record class_of C (hom : C -> C -> Type) := Class {
+Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
   base  : Cat.mixin_of hom;
   mixin : mixin_of (Cat.Pack base)
 }.
 
-Record type := Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Record type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+  _ : class_of hom
+}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion hom : type >-> Funclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
-Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Variables (C0 : Type@{i}) (C1 : C0 -> C0 -> Type@{i}) (cC : type).
 Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
 Definition clone c of phant_id class c := @Pack C0 C1 c.
 
@@ -454,8 +506,6 @@ End ProdCat.
 Export ProdCat.Exports.
 
 Section ProdCatTheory.
-
-Set Universe Polymorphism.
 
 Variable C : prodCatType.
 
@@ -512,8 +562,6 @@ move=> [X1 Y1] [X2 Y2] [X3 Y3] [/= f1 g1] [/= f2 g2]; rewrite /prod_fmap /=.
 by rewrite comp_pair -![in RHS]compA pairKL pairKR !compA.
 Qed.
 
-Unset Universe Polymorphism.
-
 End ProdCatTheory.
 
 Notation "X × Y" := (cat_prod X Y)
@@ -524,21 +572,74 @@ Local Notation "⟨ f , g , .. , h ⟩" :=
 Notation "'π1" := (cat_proj1 _ _).
 Notation "'π2" := (cat_proj2 _ _).
 
+Section CatProdCat.
+
+Universe i j.
+
+Program Definition prod_cat_pair (C D E : catType@{i})
+  (F : {functor E -> C}) (G : {functor E -> D}) :=
+  Functor (fun X => (F X, G X)) (fun _ _ f => (fmap F f, fmap G f)) _ _.
+
+Next Obligation. by move=> C D E F G X /=; rewrite !fmap1. Qed.
+Next Obligation. by move=> C D E F G X Y Z f g /=; rewrite !fmapD. Qed.
+
+Definition prod_cat_proj1 (C D : catType@{i}) : {functor C * D -> C} :=
+  Functor fst (fun _ _ f => f.1) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
+
+Definition prod_cat_proj2 (C D : catType@{i}) : {functor C * D -> D} :=
+  Functor snd (fun _ _ f => f.2) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
+
+Program Definition cat_prodCatMixin : ProdCat.mixin_of@{j} _ :=
+  @ProdCatMixin cat_catType prod_cat_catType prod_cat_pair prod_cat_proj1 prod_cat_proj2 _ _ _.
+
+Next Obligation. by move=> *; apply/eq_functor. Qed.
+Next Obligation. by move=> *; apply/eq_functor. Qed.
+Next Obligation.
+move=> /= C D E [/= F0 F1 Fmap1 FmapD] [/= G0 G1 Gmap1 GmapD].
+case=> [/eq_functor /= e1 /eq_functor /= e2].
+have e_obj : F0 = G0.
+  apply: functional_extensionality=> X.
+  move/(congr1 (fun f => tag f X)): e1.
+  move/(congr1 (fun f => tag f X)): e2=> /=.
+  by case: (F0 X) (G0 X)=> [??] [??] /= -> ->.
+move: G1 Gmap1 GmapD e1 e2; rewrite -{}e_obj {G0}.
+move=> G1 Gmap1 GmapD e1 e2.
+move: (eq_tagged e1) (eq_tagged e2).
+rewrite (proof_irrelevance _ (congr1 tag e1) erefl) /=.
+rewrite (proof_irrelevance _ (congr1 tag e2) erefl) /=.
+move=> {e1 e2} e1 e2; apply/eq_functor; congr Tagged=> /=.
+apply: functional_extensionality_dep=> X.
+apply: functional_extensionality_dep=> Y.
+apply: functional_extensionality=> f.
+move: (congr1 (fun H => H X Y f) e1) (congr1 (fun H => H X Y f) e2).
+by case: (F1 X Y f) (G1 X Y f)=> [??] [??] /= -> ->.
+Qed.
+
+Canonical cat_prodCatType : prodCatType@{j} :=
+  Eval hnf in ProdCatType catType functor cat_prodCatMixin.
+
+End CatProdCat.
+
 Module CartCat.
 
 Section ClassDef.
 
-Record class_of C (hom : C -> C -> Type) := Class {
-  base       : Cat.mixin_of hom;
-  term_mixin : TermCat.mixin_of hom;
-  prod_mixin : ProdCat.mixin_of (Cat.Pack base)
+Universe i.
+
+Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
+  base       : Cat.mixin_of@{i} hom;
+  term_mixin : TermCat.mixin_of@{i} hom;
+  prod_mixin : ProdCat.mixin_of@{i} (Cat.Pack base)
 }.
 
-Polymorphic Record type :=
-  Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Record type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+  _   : class_of hom
+}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
-Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Variables (C0 : Type@{i}) (C1 : C0 -> C0 -> Type@{i}) (cC : type).
 Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
 Definition clone c of phant_id class c := @Pack C0 C1 c.
 
@@ -579,7 +680,9 @@ Module CCCat.
 
 Section ClassDef.
 
-Record mixin_of (C : cartCatType) := Mixin {
+Universe i.
+
+Record mixin_of (C : cartCatType@{i}) := Mixin {
   exp   : C -> C -> C;
   curry : forall X Y Z, C (X × Y) Z -> C X (exp Y Z);
   eval  : forall {X Y}, C (exp X Y × X) Y;
@@ -589,17 +692,20 @@ Record mixin_of (C : cartCatType) := Mixin {
             curry (eval ∘ ⟨f ∘ 'π1, 'π2⟩) = f
 }.
 
-Record class_of C (hom : C -> C -> Type) := Class {
+Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
   base : CartCat.class_of hom;
   mixin : mixin_of (CartCat.Pack base)
 }.
 
-Polymorphic Record type :=
-  Pack {obj; hom : obj -> obj -> Type; _ : class_of hom}.
+Record type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+  _   : class_of hom
+}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion hom : type >-> Funclass.
 Local Coercion base : class_of >-> CartCat.class_of.
-Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Variables (C0 : Type@{i}) (C1 : C0 -> C0 -> Type@{i}) (cC : type).
 Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
 Definition clone c of phant_id class c := @Pack C0 C1 c.
 
@@ -639,7 +745,9 @@ Export CCCat.Exports.
 
 Section CCCatTheory.
 
-Variable C : ccCatType.
+Universe i.
+
+Variable C : ccCatType@{i}.
 
 Definition exp (X Y : C) :=
   CCCat.exp (CCCat.mixin (CCCat.class C)) X Y.
@@ -668,6 +776,8 @@ Qed.
 End CCCatTheory.
 
 Definition const (T S : Type) (x : S) (y : T) := x.
+
+Unset Universe Polymorphism.
 
 Section DFunOfProd.
 
@@ -1152,7 +1262,8 @@ Lemma mono_compf1 (T S : poType) (f : {mono T -> S}) : mono_comp f mono_id = f.
 Proof. by apply: val_inj. Qed.
 
 Definition mono_catMixin := CatMixin (And3 mono_comp1f mono_compf1 mono_compA).
-Canonical mono_catType := CatType poType mono mono_catMixin.
+Canonical mono_catType :=
+  Eval hnf in CatType poType mono mono_catMixin.
 
 Lemma mono_compE (T S R : poType)
   (f : {mono S -> R}) (g : {mono T -> S}) (x : T)
@@ -1413,8 +1524,6 @@ Qed.
 
 Section ProdPo.
 
-Set Universe Polymorphism.
-
 Variables T S : poType.
 
 Definition prod_appr (x y : T * S) :=
@@ -1455,18 +1564,14 @@ Definition mono_pairf (R : poType) f g : {mono R -> T * S} :=
   Sub (pairf _ _) (monotone_pairf f g).
 Canonical mono_pairf.
 
-Unset Universe Polymorphism.
-
 End ProdPo.
 
 Arguments mono_fst {_ _}.
 Arguments mono_snd {_ _}.
 Arguments mono_pairf {_ _ _}.
 
-Variables X Y Z : poType.
-
 Lemma monotone_mono_compp (X Y Z : poType) :
-  @monotone [poType of mono_catType Y Z * mono_catType X Y] _ (@compp _ X Y Z).
+  @monotone (prod_poType (mono_poType Y Z) (mono_poType X Y)) _ (@compp _ X Y Z).
 Proof.
 move=> [x1 y1] [x2 y2] [/= x12 y12]; exact: monotone_mono_comp.
 Qed.
@@ -2171,7 +2276,7 @@ Lemma monotone_cont_comp (T S R : cpoType) (f1 f2 : {cont S -> R}) (g1 g2 : {con
 Proof. exact: monotone_mono_comp. Qed.
 
 Lemma monotone_cont_compp (T S R : cpoType) :
-  @monotone [poType of cont_catType S R * cont_catType T S] _ (@compp _ T S R).
+  @monotone (prod_poType (cont_poType S R) (cont_poType T S)) _ (@compp _ T S R).
 Proof.
 move=> [x1 y1] [x2 y2] [/= x11 y12]; exact: monotone_cont_comp.
 Qed.
@@ -2516,33 +2621,6 @@ Definition cont2_liftss (T S : cpoType) :
   Sub _ (@continuous2_liftss T S).
 Canonical cont2_liftss.
 Arguments cont2_liftss {_ _}.
-
-Lemma continuous_mapss (T S : cpoType) (f : {cont T -> S}) :
-  continuous (mono_mapss f).
-Proof.
-move=> x; rewrite /mono_mapss /mapss /=.
-by rewrite -(contP (cont_liftss (cont_subsing_of ∘ f))).
-Qed.
-
-Definition cont_mapss (T S : cpoType) (f : {cont T -> S}) :
-  {cont subsing T -> subsing S} :=
-  Sub (mono_mapss f) (continuous_mapss f).
-Canonical cont_mapss.
-
-Lemma monotone2_cont_mapss (T S : cpoType) : monotone (@cont_mapss T S).
-Proof.
-move=> /= f g fg; rewrite appr_val /=; exact: monotone2_mapss.
-Qed.
-
-Definition mono2_cont_mapss (T S : cpoType) :
-  {mono {cont T -> S} -> {cont subsing T -> subsing S}} :=
-  Sub _ (@monotone2_cont_mapss T S).
-Canonical mono2_cont_mapss.
-
-Definition cont2_mapss (T S : cpoType) :
-  {cont {cont T -> S} -> {cont subsing T -> subsing S}} :=
-  @cont2_liftss T S ∘ cont_compp ∘ (cont_pairf (cont_const _ cont_subsing_of) 1).
-Arguments cont2_mapss {_ _}.
 
 Section InverseLimit.
 
@@ -3022,7 +3100,7 @@ Qed.
 Lemma f_embD (T S R : cpoType) (f : {retr S -> R}) (g : {retr T -> S}) :
   f_emb (f ∘ g) = f_emb f ∘ f_emb g.
 Proof.
-apply: retr_retr_inj; rewrite /comp /f_emb /retr_retr /=.
+apply: retr_retr_inj; unfold comp, f_emb, retr_retr; simpl.
 by rewrite f_morD.
 Qed.
 
