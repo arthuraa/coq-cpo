@@ -233,6 +233,10 @@ Definition op_catMixin :=
 Canonical op_catType :=
   CatType op_obj op_hom op_catMixin.
 
+(** Identities to help type checking *)
+Definition of_op X Y (f : op_hom X Y) : C Y X := f.
+Definition to_op X Y (f : C X Y) : op_hom Y X := f.
+
 End Opposite.
 
 Notation "C '^op'" := (op_catType C)
@@ -599,6 +603,14 @@ Proof. by apply: pairP; rewrite !compA !pairKL !pairKR. Qed.
 Lemma projK X Y : ⟨'π1, 'π2⟩ = 1 :> C (X × Y) (X × Y).
 Proof. by apply: pairP; rewrite pairKL pairKR !compf1. Qed.
 
+Lemma split_pair X1 Y1 X2 Y2 (f : C X1 X2) (g : C Y1 Y2) :
+  ⟨f ∘ 'π1, g ∘ 'π2⟩ = ⟨f ∘ 'π1, 'π2⟩ ∘ ⟨'π1, g ∘ 'π2⟩.
+Proof. by rewrite comp_pair -compA pairKL pairKR. Qed.
+
+Lemma split_pairV X1 Y1 X2 Y2 (f : C X1 X2) (g : C Y1 Y2) :
+  ⟨f ∘ 'π1, g ∘ 'π2⟩ = ⟨'π1, g ∘ 'π2⟩ ∘ ⟨f ∘ 'π1, 'π2⟩.
+Proof. by rewrite comp_pair -compA pairKL pairKR. Qed.
+
 Definition prod_fobj (X : C * C) := X.1 × X.2.
 Definition prod_fmap (X Y : C * C) f : C (prod_fobj X) (prod_fobj Y) :=
   ⟨f.1 ∘ 'π1, f.2 ∘ 'π2⟩.
@@ -805,7 +817,7 @@ Local Notation "X ⇒ Y" := (exp X Y)
   (at level 25, right associativity).
 Definition curry (X Y Z : C) (f : C (X × Y) Z) : C X (Y ⇒ Z) :=
   CCCat.curry (CCCat.mixin (CCCat.class C)) f.
-Local Notation "'λ' f" := (curry f) (at level 0).
+Local Notation "'λ' f" := (curry f) (at level 0, f at level 9).
 Definition eval (X Y : C) : C ((X ⇒ Y) × X) Y :=
   CCCat.eval (CCCat.mixin (CCCat.class C)).
 Arguments eval {_ _}.
@@ -822,6 +834,37 @@ Lemma uncurryK X Y Z (f : C X (Y ⇒ Z)) : λ (uncurry f) = f.
 Proof.
 by move: f; rewrite /uncurry /= /exp /curry /eval; case: (CCCat.mixin _)=> /=.
 Qed.
+
+Lemma comp_curry X1 X2 Y Z (f : C (X2 × Y) Z) (g : C X1 X2) :
+  λ f ∘ g = λ (f ∘ ⟨g ∘ 'π1, 'π2⟩).
+Proof.
+rewrite -[LHS]uncurryK -[RHS]uncurryK; congr curry; rewrite curryK.
+rewrite -{2}(curryK f) /uncurry -[RHS]compA comp_pair.
+by rewrite -[in RHS]compA pairKL pairKR compA.
+Qed.
+
+Definition exp_fobj (X : C^op × C) := X.1 ⇒ X.2.
+Definition exp_fmap (X Y : C^op × C) (f : Cat.hom (C^op × C) X Y) :
+  C (exp_fobj X) (exp_fobj Y) :=
+  λ (f.2 ∘ eval ∘ ⟨'π1, of_op f.1 ∘ 'π2⟩).
+Lemma exp_fmap1 (X : C^op × C) :
+  exp_fmap 1 = 1 :> C (exp_fobj X) (exp_fobj X).
+Proof.
+by rewrite /exp_fmap /= !comp1f -(comp1f 'π1) -{2}(uncurryK 1).
+Qed.
+Lemma exp_fmapD (X Y Z : C^op × C) (g : (C^op × C) Y Z) (f : (C^op × C) X Y) :
+  exp_fmap (g ∘ f) = exp_fmap g ∘ exp_fmap f.
+Proof.
+rewrite /exp_fmap /= comp_curry -!(compA g.2); congr (λ (g.2 ∘ _)).
+rewrite -[RHS]compA /=.
+rewrite comp_pair pairKL -(compA (of_op g.1)) pairKR.
+rewrite split_pair compA.
+move: (curryK (f.2 ∘ eval ∘ ⟨'π1, of_op f.1 ∘ 'π2⟩)).
+by rewrite /uncurry=> ->; rewrite -!compA comp_pair pairKL -compA pairKR.
+Qed.
+
+Definition exp_functor : {functor C^op × C -> C} :=
+  Functor exp_fobj exp_fmap exp_fmap1 exp_fmapD.
 
 End CCCatTheory.
 
