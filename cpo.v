@@ -26,23 +26,9 @@ Unset Printing Implicit Defensive.
 *)
 
 Obligation Tactic := idtac.
-
-Universe phant.
-
-Section Unification.
-
-Variant phantom (T : Type@{phant}) (p : T) : Prop := Phantom.
-Arguments phantom : clear implicits.
-Arguments Phantom : clear implicits.
-Definition phant_id (T1 T2 : Type@{phant}) v1 v2 : Prop :=
-  phantom T1 v1 -> phantom T2 v2.
-
-Definition phant_id_err {T1 T2 : Type@{phant}} t1 t2 (s : string) : Prop :=
+Definition phant_id_err {T1 T2 : Type} t1 t2 (s : string) : Prop :=
   phantom T1 t1 -> phantom T2 t2.
-Definition unify {T : Type@{phant}} {t : T} (x : phantom T t) := x.
-
-End Unification.
-
+Definition unify {T : Type} {t : T} (x : phantom T t) := x.
 Notation "[ 'find' v | t1 ~ t2 ] rest" :=
   (fun v (_ : phant_id t1 t2) => rest)
   (at level 0, v ident, rest at level 10, right associativity) : form_scope.
