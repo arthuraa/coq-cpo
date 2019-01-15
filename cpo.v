@@ -158,11 +158,47 @@ End Casts.
 
 Arguments cast {T} P {x y} e.
 
+Definition castK (T P : Type) (x y : T) (p : x = y) : cast (fun _ => P) p = id :=
+  match p with erefl => erefl end.
+
+Definition sapp_cast T S (P : T -> S -> Type) x1 x2 y (p : x1 = x2) :
+  forall (f : forall y, P x1 y),
+    cast (fun x => forall y, P x y) p f y = cast (fun x => P x y) p (f y) :=
+  match p with erefl => fun _ => erefl end.
+
+Definition cast_sapp T (S R : T -> Type) x1 x2 (p : x1 = x2) :
+  forall (f : forall x, S x -> R x) (a : S x1),
+  f x2 (cast S p a) = cast R p (f x1 a) :=
+  match p with erefl => fun _ _ => erefl end.
+
+Definition dapp_cast T (P : T -> Type) (Q : forall x, P x -> Type) x y
+  (p : x = y) :
+  forall (f : forall a : P x, Q x a) (a : P y),
+  cast (fun x => forall a : P x, Q x a) p f a =
+  match esym p as q in _ = z return Q z (cast P q a) -> Q y a with
+  | erefl => id
+  end (f (cast P (esym p) a)) :=
+  match p with
+  | erefl => fun _ _ => erefl
+  end.
+
+Definition cast_congr1 T (P : T -> Type) x y (p : x = y) :
+  forall (a : P x), cast P p a = cast id (congr1 P p) a :=
+  match p with erefl => fun a => erefl end.
+
 Definition eq_tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) (e : x = y) :
   cast T_ (congr1 tag e) (tagged x) = tagged y :=
   match e with
   | erefl => erefl
   end.
+
+Lemma eq_Tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) :
+  forall (p : tag x = tag y),
+    cast T_ p (tagged x) = tagged y ->
+    x = y.
+Proof.
+by case: x y=> [i xi] [j yj] /= p; case: j / p yj => yj /= <-.
+Qed.
 
 Section DFunOfProd.
 
@@ -481,6 +517,7 @@ Arguments fmap {_ _} _ {_ _}.
 Arguments Functor {_ _} _ _ _ _.
 Notation "{ 'functor' T }" := (functor_of _ _ (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
+Arguments NatTrans {_ _ _ _} _ _.
 
 Section CatCat.
 
@@ -530,6 +567,11 @@ Qed.
 Definition prod_cat_catMixin := CatMixin prod_cat_compP.
 Canonical prod_cat_catType :=
   Eval hnf in CatType (C * D) prod_cat_hom prod_cat_catMixin.
+
+Lemma prod_cat_compE
+  X Y Z (f : prod_cat_catType Y Z) (g : prod_cat_catType X Y) :
+  f ∘ g = (f.1 ∘ g.1, f.2 ∘ g.2).
+Proof. by []. Qed.
 
 End ProdCatCat.
 
@@ -818,6 +860,7 @@ Canonical cat_prodCatType : prodCatType@{j} :=
 
 End CatProdCat.
 
+
 Module CartCat.
 
 Section ClassDef.
@@ -873,6 +916,15 @@ End Exports.
 End CartCat.
 
 Export CartCat.Exports.
+
+Section CatCartCat.
+
+Universe i j.
+
+Canonical cat_cartCatType : cartCatType@{j} :=
+  Eval hnf in CartCatType catType@{i} functor@{i}.
+
+End CatCartCat.
 
 Module CCCat.
 
@@ -933,6 +985,7 @@ Coercion prodCatType : type >-> ProdCat.type.
 Canonical prodCatType.
 Coercion cartCatType : type >-> CartCat.type.
 Canonical cartCatType.
+Notation CCCatMixin := Mixin.
 Notation ccCatType := type.
 Notation CCCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
 End Exports.
@@ -1003,6 +1056,102 @@ Definition exp_functor : {functor C^op × C -> C} :=
   Functor exp_fobj exp_fmap exp_fmap1 exp_fmapD.
 
 End CCCatTheory.
+
+Section CatCCCat.
+
+Universe i.
+
+Program Definition functor_curry
+  (C D E : catType@{i}) (F : {functor C * D -> E})
+  : {functor C -> {functor D -> E}} :=
+  Functor@{i}
+    (fun X => Functor@{i}
+                (fun Y => F (X, Y))
+                (fun Y1 Y2 g => @fmap _ _ F (X, Y1) (X, Y2) (1, g))
+                (fun Y => fmap1 F (X, Y)) _)
+    (fun X1 X2 f => NatTrans@{i}
+                      (fun Y => @fmap _ _ F (X1, Y) (X2, Y) (f, 1)) _)
+    _ _.
+
+Next Obligation.
+move=> C D E F X Y1 Y2 Y3 g1 g2 /=.
+by rewrite -fmapD prod_cat_compE /= comp1f.
+Qed.
+
+Next Obligation.
+move=> C D E F X1 X2 f Y1 Y2 g /=; rewrite -2!fmapD.
+by do 2![rewrite prod_cat_compE /=]; rewrite !comp1f !compf1.
+Qed.
+
+Next Obligation.
+move=> C D E F X /=; apply/eq_nat_trans=> Y /=.
+by rewrite fmap1.
+Qed.
+
+Next Obligation.
+move=> C D E F X1 X2 X3 f1 f2 /=; apply/eq_nat_trans=> Y /=.
+by rewrite -fmapD prod_cat_compE /= comp1f.
+Qed.
+
+Program Definition functor_eval (C D : catType@{i})
+  : {functor {functor C -> D} * C -> D} :=
+  Functor (fun FX => FX.1 FX.2)
+          (fun FX1 FX2 α => α.1 FX2.2 ∘ fmap FX1.1 α.2) _ _.
+
+Next Obligation. by move=> /= C D [F X]; rewrite comp1f fmap1. Qed.
+
+Next Obligation.
+move=> /= C D [F X] [G Y] [H Z] [/= α f] [/= β g].
+rewrite fmapD -compA (compA (β Z)) -nt_valP.
+by rewrite -compA (compA (α Z)).
+Qed.
+
+Arguments functor_eval {_ _}.
+
+Lemma functor_curryK (C D E : catType@{i}) (F : {functor C * D -> E}) :
+  functor_eval ∘ ⟨functor_curry F ∘ 'π1, 'π2⟩ = F.
+Proof.
+apply/eq_functor=> /=; congr Tagged.
+apply: functional_extensionality_dep=> - [X1 Y1].
+apply: functional_extensionality_dep=> - [X2 Y2].
+apply: functional_extensionality=> - [/= f g].
+by rewrite -fmapD prod_cat_compE /= comp1f compf1.
+Qed.
+
+(* FIXME: This proof is horrible *)
+Lemma functor_uncurryK (C D E : catType@{i})
+  (F : {functor C -> {functor D -> E}}) :
+  functor_curry (functor_eval ∘ ⟨F ∘ 'π1, 'π2⟩) = F.
+Proof.
+apply/eq_functor=> /=; apply: eq_Tagged=> /=.
+- apply: functional_extensionality=> X.
+  apply/eq_functor; congr Tagged=> /=.
+  apply: functional_extensionality_dep=> Y1.
+  apply: functional_extensionality_dep=> Y2.
+  apply: functional_extensionality=> g.
+  by rewrite fmap1 /= comp1f.
+- case: F=> [/= F0 F1 Fmap1 FmapD] p.
+  apply/functional_extensionality_dep=> X1.
+  apply/functional_extensionality_dep=> X2.
+  apply/functional_extensionality=> g.
+  apply/eq_nat_trans=> Y /=.
+  rewrite !sapp_cast /=.
+  set α := NatTrans _ _.
+  rewrite (@cast_sapp (C -> {functor D -> E})
+                      (fun F => nat_trans (F X1) (F X2))
+                      (fun F => forall Y, E (F X1 Y) (F X2 Y)) _ _ p
+                    (fun F => @nt_val D E (F X1) (F X2)) α).
+  rewrite /= sapp_cast fmap1 compf1 cast_congr1 /= {α}.
+  rewrite (_ : congr1 _ p = congr1 (fun H : C -> D -> E => E (H X1 Y) (H X2 Y)) (congr1 (fun F X => fobj (F X)) p)).
+    by move: (congr1 _ p)=> /= => q; rewrite (proof_irrelevance _ q  erefl) /=.
+  exact: proof_irrelevance.
+Qed.
+
+Definition cat_ccCatMixin := CCCatMixin functor_curryK functor_uncurryK.
+Canonical cat_ccCatType :=
+  Eval hnf in CCCatType catType@{i} functor@{i} cat_ccCatMixin.
+
+End CatCCCat.
 
 Definition const (T S : Type) (x : S) (y : T) := x.
 
