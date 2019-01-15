@@ -44,6 +44,74 @@ Notation "[ 'find' v : T | t1 ~ t2 | msg ] rest" :=
 Notation "’Error: t msg" := (phant_id_err _ t msg)
   (at level 0) : form_scope.
 
+Section SubType.
+
+Variables (T : Type) (P : T -> Prop).
+
+Structure subType := SubType {
+  sub_sort :> Type;
+  val : sub_sort -> T;
+  Sub : forall x, P x -> sub_sort;
+  _   : forall K (_ : forall x Px, K (@Sub x Px)) u, K u;
+  _   : forall x Px, val (@Sub x Px) = x
+}.
+
+Variable sT : subType.
+
+Lemma SubP : forall K (_ : forall x Px, K (@Sub sT x Px)) u, K u.
+Proof. by case: (sT). Qed.
+
+Lemma SubK : forall x Px, val (@Sub sT x Px) = x.
+Proof. by case: (sT). Qed.
+
+Lemma val_inj : injective (@val sT).
+Proof.
+elim/SubP=> [x Px]; elim/SubP=> [y Py]; rewrite !SubK=> e.
+by move: Px; rewrite e=> Px; rewrite (proof_irrelevance _ Px Py).
+Qed.
+
+Lemma valP : forall x : sT, P (val x).
+Proof. by elim/SubP=> x Px; rewrite SubK. Qed.
+
+Lemma vrefl : forall x, P x -> x = x. Proof. by []. Qed.
+Definition vrefl_rect := vrefl.
+
+Definition clone_subType U v :=
+  fun sT & sub_sort sT -> U =>
+  fun c Urec cK (sT' := @SubType U v c Urec cK) & phant_id sT' sT => sT'.
+
+End SubType.
+
+Local Notation inlined_sub_rect :=
+  (fun K K_S u => let (x, Px) as u return K u := u in K_S x Px).
+
+Arguments SubType {_ _} _ _ _ _ _.
+Arguments vrefl_rect {_ _} _ _.
+Arguments Sub {_ _ _} _ _.
+Arguments val {_ _ _} _.
+Arguments clone_subType [T P] U v [sT] _ [c Urec cK].
+
+Notation "[ 'subType' 'for' v ]" := (SubType _ v _ inlined_sub_rect vrefl_rect)
+ (at level 0, only parsing) : form_scope.
+
+Notation "[ 'subType' 'of' U ]" := (clone_subType U _ id id)
+ (at level 0, format "[ 'subType'  'of'  U ]") : form_scope.
+
+Local Notation inlined_new_rect :=
+  (fun K K_S u => let (x) as u return K u := u in K_S x).
+
+Definition NewType T U v c Urec :=
+  let Urec' P IH := Urec P (fun x : T => IH x isT : P _) in
+  SubType U v (fun x _ => c x) Urec'.
+
+Arguments NewType [T U].
+
+Notation "[ 'newType' 'for' v ]" := (NewType v _ inlined_new_rect vrefl_rect)
+ (at level 0, only parsing) : form_scope.
+
+Canonical sig_subType (T : Type) (P : T -> Prop) :=
+  [subType for @sval T P].
+
 Set Universe Polymorphism.
 Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
@@ -95,6 +163,27 @@ Definition eq_tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) (e : x =
   match e with
   | erefl => erefl
   end.
+
+Section DFunOfProd.
+
+Variables (K : Type) (K_sort : K -> Type).
+Variables T S : K.
+
+Local Coercion K_sort : K >-> Sortclass.
+
+Definition dfun_of_prod (p : T * S) : dfun (fun b => if b then T else S) :=
+  fun b => match b with
+           | true => p.1
+           | false => p.2
+           end.
+
+Definition prod_of_dfun (p : dfun (fun b => if b then T else S)) : T * S :=
+  (p true, p false).
+
+Lemma dfun_of_prodK : cancel dfun_of_prod prod_of_dfun.
+Proof. by case. Qed.
+
+End DFunOfProd.
 
 Reserved Notation "g ∘ f" (at level 20, left associativity).
 
@@ -338,6 +427,53 @@ move: {e} (congr1 _ e) (eq_tagged e)=> /= e0 e1.
 case: G0 / e0 G1 e1 Gmap1 GmapD => /= G1 e1; case: G1 / e1=> Gmap1 GmapD.
 by rewrite (proof_irrelevance _ Fmap1 Gmap1) (proof_irrelevance _ FmapD GmapD).
 Qed.
+
+Implicit Types F G H : {functor C -> D}.
+
+Record nat_trans F G := NatTrans {
+  nt_val  :> forall X, D (F X) (G X);
+  nt_valP :  forall X Y (f : C X Y),
+               fmap G f ∘ nt_val X = nt_val Y ∘ fmap F f
+}.
+
+Arguments NatTrans {_ _} _ _.
+
+Canonical nat_trans_subType F G :=
+  [subType for @nt_val F G].
+
+Lemma eq_nat_trans F G (α β : nat_trans F G) :
+  (forall X, α X = β X) <-> α = β.
+Proof.
+split; last by move=> ->.
+by move=> e; apply: val_inj; apply: functional_extensionality_dep.
+Qed.
+
+Program Definition nat_trans_comp F G H
+  (α : nat_trans G H) (β : nat_trans F G) : nat_trans F H :=
+  NatTrans (fun X => α X ∘ β X) _.
+
+Next Obligation.
+by move=> F G H α β X Y f /=; rewrite compA nt_valP -compA nt_valP compA.
+Qed.
+
+Program Definition nat_trans_id F : nat_trans F F :=
+  NatTrans (fun X => 1) _.
+
+Next Obligation. by move=> F X Y f /=; rewrite comp1f compf1. Qed.
+
+Lemma nat_trans_compP : Cat.axioms nat_trans_comp nat_trans_id.
+Proof.
+split.
+- by move=> F G α; apply/eq_nat_trans=> X /=; rewrite comp1f.
+- by move=> F G α; apply/eq_nat_trans=> X /=; rewrite compf1.
+- by move=> F G H K α β γ; apply/eq_nat_trans=> X /=; rewrite compA.
+Qed.
+
+Definition functor_catMixin := CatMixin nat_trans_compP.
+Canonical functor_catType :=
+  CatType functor nat_trans functor_catMixin.
+Canonical functor_of_catType :=
+  CatType {functor C -> D} nat_trans functor_catMixin.
 
 End Functor.
 
@@ -871,95 +1007,6 @@ End CCCatTheory.
 Definition const (T S : Type) (x : S) (y : T) := x.
 
 Unset Universe Polymorphism.
-
-Section DFunOfProd.
-
-Variables (K : Type) (K_sort : K -> Type).
-Variables T S : K.
-
-Local Coercion K_sort : K >-> Sortclass.
-
-Definition dfun_of_prod (p : T * S) : dfun (fun b => if b then T else S) :=
-  fun b => match b with
-           | true => p.1
-           | false => p.2
-           end.
-
-Definition prod_of_dfun (p : dfun (fun b => if b then T else S)) : T * S :=
-  (p true, p false).
-
-Lemma dfun_of_prodK : cancel dfun_of_prod prod_of_dfun.
-Proof. by case. Qed.
-
-End DFunOfProd.
-
-Section SubType.
-
-Variables (T : Type) (P : T -> Prop).
-
-Structure subType := SubType {
-  sub_sort :> Type;
-  val : sub_sort -> T;
-  Sub : forall x, P x -> sub_sort;
-  _   : forall K (_ : forall x Px, K (@Sub x Px)) u, K u;
-  _   : forall x Px, val (@Sub x Px) = x
-}.
-
-Variable sT : subType.
-
-Lemma SubP : forall K (_ : forall x Px, K (@Sub sT x Px)) u, K u.
-Proof. by case: (sT). Qed.
-
-Lemma SubK : forall x Px, val (@Sub sT x Px) = x.
-Proof. by case: (sT). Qed.
-
-Lemma val_inj : injective (@val sT).
-Proof.
-elim/SubP=> [x Px]; elim/SubP=> [y Py]; rewrite !SubK=> e.
-by move: Px; rewrite e=> Px; rewrite (proof_irrelevance _ Px Py).
-Qed.
-
-Lemma valP : forall x : sT, P (val x).
-Proof. by elim/SubP=> x Px; rewrite SubK. Qed.
-
-Lemma vrefl : forall x, P x -> x = x. Proof. by []. Qed.
-Definition vrefl_rect := vrefl.
-
-Definition clone_subType U v :=
-  fun sT & sub_sort sT -> U =>
-  fun c Urec cK (sT' := @SubType U v c Urec cK) & phant_id sT' sT => sT'.
-
-End SubType.
-
-Local Notation inlined_sub_rect :=
-  (fun K K_S u => let (x, Px) as u return K u := u in K_S x Px).
-
-Arguments SubType {_ _} _ _ _ _ _.
-Arguments vrefl_rect {_ _} _ _.
-Arguments Sub {_ _ _} _ _.
-Arguments val {_ _ _} _.
-Arguments clone_subType [T P] U v [sT] _ [c Urec cK].
-
-Notation "[ 'subType' 'for' v ]" := (SubType _ v _ inlined_sub_rect vrefl_rect)
- (at level 0, only parsing) : form_scope.
-
-Notation "[ 'subType' 'of' U ]" := (clone_subType U _ id id)
- (at level 0, format "[ 'subType'  'of'  U ]") : form_scope.
-
-Local Notation inlined_new_rect :=
-  (fun K K_S u => let (x) as u return K u := u in K_S x).
-
-Definition NewType T U v c Urec :=
-  let Urec' P IH := Urec P (fun x : T => IH x isT : P _) in
-  SubType U v (fun x _ => c x) Urec'.
-
-Arguments NewType [T U].
-
-Notation "[ 'newType' 'for' v ]" := (NewType v _ inlined_new_rect vrefl_rect)
- (at level 0, only parsing) : form_scope.
-
-Canonical sig_subType (T : Type) (P : T -> Prop) :=
-  [subType for @sval T P].
 
 Module Choice.
 
