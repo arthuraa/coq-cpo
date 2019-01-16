@@ -1500,7 +1500,7 @@ Record mono (T S : poType) := Mono {
   _        :  monotone mono_val
 }.
 
-Arguments Mono {_ _ _}.
+Arguments Mono {_ _}.
 
 Definition mono_of (T S : poType) of phant (T -> S) := mono T S.
 
@@ -1552,6 +1552,28 @@ Proof. by apply: val_inj. Qed.
 Definition mono_catMixin := CatMixin (And3 mono_comp1f mono_compf1 mono_compA).
 Canonical mono_catType :=
   Eval hnf in CatType poType mono mono_catMixin.
+
+Definition unit_appr (x y : unit) := True.
+
+Lemma unit_apprP : Po.axioms unit_appr.
+Proof. by split=> // [] [] []. Qed.
+
+Definition unit_poMixin := PoMixin unit_apprP.
+
+Canonical unit_poType := PoType unit unit_poMixin.
+
+Definition mono_bang (T : poType) : {mono T -> unit} :=
+  Sub (fun _ => tt) (fun _ _ _ => I).
+
+Program Definition mono_termCatMixin :=
+  @TermCatMixin _ _ unit_poType mono_bang _.
+
+Next Obligation.
+move=> T f; apply/eq_mono=> x; by case: (f x).
+Qed.
+
+Canonical mono_termCatType :=
+  Eval hnf in TermCatType poType mono mono_termCatMixin.
 
 Lemma mono_compE (T S R : poType)
   (f : {mono S -> R}) (g : {mono T -> S}) (x : T)
@@ -1854,21 +1876,56 @@ Canonical mono_pairf.
 
 End ProdPo.
 
+Lemma mono_prodP : ProdCat.axioms_of mono_pairf mono_fst mono_snd.
+Proof.
+split.
+- by move=> /= T S R f g; apply/eq_mono=> x.
+- by move=> /= T S R f g; apply/eq_mono=> x.
+move=> /= T S R f g [/eq_mono H1 /eq_mono H2]; apply/eq_mono=> x.
+by move: (H1 x) (H2 x)=> /=; case: (f x) (g x)=> [??] [??] /= -> ->.
+Qed.
+
+Definition mono_prodCatMixin := ProdCatMixin mono_prodP.
+Canonical mono_prodCatType :=
+  Eval hnf in ProdCatType poType mono mono_prodCatMixin.
+
 Arguments mono_fst {_ _}.
 Arguments mono_snd {_ _}.
 Arguments mono_pairf {_ _ _}.
 
-Lemma monotone_mono_compp (X Y Z : poType) :
-  @monotone (prod_poType (mono_poType Y Z) (mono_poType X Y)) _ (@compp _ X Y Z).
-Proof.
-move=> [x1 y1] [x2 y2] [/= x12 y12]; exact: monotone_mono_comp.
+Canonical mono_cartCatType :=
+  Eval hnf in CartCatType poType mono.
+
+Program Definition mono_curry (T S R : poType) (f : {mono T * S -> R}) :
+    {mono T -> {mono S -> R}} :=
+  Mono (fun x => Mono (fun y => f (x, y)) _) _.
+
+Next Obligation.
+by move=> T S R f x y1 y2 y12; apply: monoP; split=> //; reflexivity.
 Qed.
 
-Definition mono_compp (X Y Z : poType) :
-  {mono {mono Y -> Z} * {mono X -> Y} -> {mono X -> Z}} :=
-  Mono (@monotone_mono_compp X Y Z).
-Canonical mono_compp.
-Arguments mono_compp {_ _ _}.
+Next Obligation.
+by move=> T S R f x1 x2 x12 y /=; apply: monoP; split=> //; reflexivity.
+Qed.
+
+Program Definition mono_eval (T S : poType) :
+    {mono {mono T -> S} * T -> S} :=
+  Mono (fun p => p.1 p.2) _.
+
+Next Obligation.
+move=> T S [/= f x] [/= g y] [/= fg xy].
+apply: transitivity (monoP g xy); exact: fg.
+Qed.
+
+Lemma mono_ccCatAxioms : CCCat.axioms_of mono_curry mono_eval.
+Proof.
+split; first by move=> T S R f; apply/eq_mono; case.
+by move=> /= T S R f; apply/eq_mono=> x; apply/eq_mono=> y.
+Qed.
+
+Definition mono_ccCatMixin := CCCatMixin mono_ccCatAxioms.
+Canonical mono_ccCatType :=
+  Eval hnf in CCCatType poType mono mono_ccCatMixin.
 
 Lemma nat_apprP : Po.axioms leq.
 Proof.
@@ -2571,7 +2628,7 @@ Qed.
 
 Definition mono_cont_compp (T S R : cpoType) :
   {mono {cont S -> R} * {cont T -> S} -> {cont T -> R}} :=
-  Mono (@monotone_cont_compp T S R).
+  Mono _ (@monotone_cont_compp T S R).
 Canonical mono_cont_compp.
 Arguments mono_cont_compp {_ _ _}.
 
@@ -2813,11 +2870,11 @@ split.
     have {n1n2} n1n2: (n + n1) <= (n + n2) by rewrite leq_add2l.
     have [x' X_n2' ?] := valP X _ _ n1n2 _ X_n1.
     by rewrite (valP (X (n + n2)) _ _ X_n2 X_n2').
-  exists (sup (Mono y_mono)).
-    exists (Mono y_mono), n; split=> //.
+  exists (sup (Mono _ y_mono)).
+    exists (Mono _ y_mono), n; split=> //.
     by move=> m; apply/(valP (choose (H m))).
   suffices -> : x = y 0.
-    by case: (supP (Mono y_mono))=> [/= ub_y _]; apply: ub_y.
+    by case: (supP (Mono _ y_mono))=> [/= ub_y _]; apply: ub_y.
   rewrite /y; case: (choose _)=> z; rewrite /= addn0=> zP.
   by rewrite (valP (X n) _ _ Xnx zP).
 - move=> /= ub_X ub_XP _ [y [n [eq_y ->]]].
@@ -2867,8 +2924,8 @@ apply: propositional_extensionality; split.
     move: m12; rewrite {1}/appr /= -(leq_add2l n).
     case/(monoP X)/(_ _ x1P)=> [x2' x2'P].
     by rewrite (subsingP x2P x2'P).
-  exists (sup (Mono x_mono)).
-    exists (Mono x_mono), n; split=> // m; rewrite /= /x.
+  exists (sup (Mono _ x_mono)).
+    exists (Mono _ x_mono), n; split=> // m; rewrite /= /x.
     by case: (choose _)=> [? [??]].
   rewrite -contP; exists y, 0; split=> // m; rewrite /= /x.
   by case: (choose _)=> [? []].
@@ -3470,7 +3527,7 @@ apply: monotone_cont_comp; first reflexivity.
 move=> x; exact: downlE_outlim.
 Qed.
 
-Definition unroll : {cont mu -> F mu mu} := sup (Mono unroll_proof).
+Definition unroll : {cont mu -> F mu mu} := sup (Mono _ unroll_proof).
 
 Lemma unrollK : cont_roll ∘ unroll = 1.
 Proof.
