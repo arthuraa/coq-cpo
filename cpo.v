@@ -112,39 +112,9 @@ Notation "[ 'newType' 'for' v ]" := (NewType v _ inlined_new_rect vrefl_rect)
 Canonical sig_subType (T : Type) (P : T -> Prop) :=
   [subType for @sval T P].
 
-Set Universe Polymorphism.
-Set Polymorphic Inductive Cumulativity.
-Unset Universe Minimization ToSet.
-
-Definition dfun T (S : T -> Type) := forall x, S x.
-Polymorphic Definition sfun@{i} (T S : Type@{i}) : Type@{i} := T -> S.
-
-Polymorphic Definition flip@{i} (T S : Type@{i}) (R : T -> S -> Type@{i})
-  (f : forall x y, R x y) y x := f x y.
-
-Identity Coercion fun_of_dfun : dfun >-> Funclass.
-Identity Coercion fun_of_sfun : sfun >-> Funclass.
-
-Set Primitive Projections.
-Record prod@{i} (T S : Type@{i}) := pair {
-  fst : T; snd : S
-}.
-Unset Primitive Projections.
-Notation "T * S" := (prod T S) : type_scope.
-Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
-Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
-Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
-
-Arguments fst {_ _} _.
-Arguments snd {_ _} _.
-Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x :=
-  (f x, g x).
-
 Section Casts.
 
-Universe i.
-
-Variable (T : Type@{i}).
+Variable (T : Type).
 Implicit Types (x y z : T).
 
 Definition cast (P : T -> Type) x y (e : x = y) : P x -> P y :=
@@ -199,6 +169,34 @@ Lemma eq_Tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) :
 Proof.
 by case: x y=> [i xi] [j yj] /= p; case: j / p yj => yj /= <-.
 Qed.
+
+Set Universe Polymorphism.
+Set Polymorphic Inductive Cumulativity.
+Unset Universe Minimization ToSet.
+
+Definition dfun T (S : T -> Type) := forall x, S x.
+Polymorphic Definition sfun@{i} (T S : Type@{i}) : Type@{i} := T -> S.
+
+Polymorphic Definition flip@{i} (T S : Type@{i}) (R : T -> S -> Type@{i})
+  (f : forall x y, R x y) y x := f x y.
+
+Identity Coercion fun_of_dfun : dfun >-> Funclass.
+Identity Coercion fun_of_sfun : sfun >-> Funclass.
+
+Set Primitive Projections.
+Record prod@{i} (T S : Type@{i}) := pair {
+  fst : T; snd : S
+}.
+Unset Primitive Projections.
+Notation "T * S" := (prod T S) : type_scope.
+Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
+Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
+Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
+
+Arguments fst {_ _} _.
+Arguments snd {_ _} _.
+Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x :=
+  (f x, g x).
 
 Section DFunOfProd.
 
@@ -681,20 +679,28 @@ Section ClassDef.
 
 Universe i.
 
-Record mixin_of (C : catType@{i}) := Mixin {
-  prod  : C -> C -> C;
-  pair  : forall X Y Z, C Z X -> C Z Y -> C Z (prod X Y);
-  proj1 : forall X Y, C (prod X Y) X;
-  proj2 : forall X Y, C (prod X Y) Y;
-  _     : forall X Y Z (f : C Z X) (g : C Z Y),
-            proj1 _ _ ∘ pair f g = f;
-  _     : forall X Y Z (f : C Z X) (g : C Z Y),
-            proj2 _ _ ∘ pair f g = g;
-  _     : forall X Y Z (f g : C Z (prod X Y)),
-            proj1 _ _ ∘ f = proj1 _ _ ∘ g /\
-            proj2 _ _ ∘ f = proj2 _ _ ∘ g ->
-            f = g
+Record axioms_of (C : catType@{i})
+                 (prod : C -> C -> C)
+                 (pair  : forall {X Y Z}, C Z X -> C Z Y -> C Z (prod X Y))
+                 (proj1 : forall {X Y}, C (prod X Y) X)
+                 (proj2 : forall {X Y}, C (prod X Y) Y) := Ax {
+  pairKL : forall X Y Z (f : C Z X) (g : C Z Y),
+             proj1 ∘ pair f g = f;
+  pairKR : forall X Y Z (f : C Z X) (g : C Z Y),
+             proj2 ∘ pair f g = g;
+  pairP  : forall X Y Z (f g : C Z (prod X Y)),
+             proj1 ∘ f = proj1 ∘ g /\
+             proj2 ∘ f = proj2 ∘ g ->
+             f = g
 }.
+
+Record mixin_of (C : catType@{i}) := Mixin {
+  prod; pair; proj1; proj2; _ : @axioms_of C prod pair proj1 proj2
+}.
+
+Definition axioms (C : catType@{i}) (m : mixin_of C) :=
+  let: Mixin _ _ _ _ ax := m return axioms_of (pair m) (proj1 m) (proj2 m) in
+  ax.
 
 Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
   base  : Cat.mixin_of hom;
@@ -739,7 +745,9 @@ Export ProdCat.Exports.
 
 Section ProdCatTheory.
 
-Variable C : prodCatType.
+Universe i.
+
+Variable C : prodCatType@{i}.
 
 Definition cat_prod (X Y : C) : C :=
   ProdCat.prod (ProdCat.mixin (ProdCat.class C)) X Y.
@@ -758,21 +766,14 @@ Local Notation "'π1" := (cat_proj1 _ _).
 Local Notation "'π2" := (cat_proj2 _ _).
 
 Lemma pairKL X Y Z (f : C Z X) (g : C Z Y) : 'π1 ∘ ⟨f, g⟩ = f.
-Proof.
-by move: f g; rewrite /cat_proj1 /cat_pair /cat_prod; case: (ProdCat.mixin _).
-Qed.
+Proof. exact: (ProdCat.pairKL (ProdCat.axioms _)). Qed.
 
 Lemma pairKR X Y Z (f : C Z X) (g : C Z Y) : 'π2 ∘ ⟨f, g⟩ = g.
-Proof.
-by move: f g; rewrite /cat_proj2 /cat_pair /cat_prod; case: (ProdCat.mixin _).
-Qed.
+Proof. exact: (ProdCat.pairKR (ProdCat.axioms _)). Qed.
 
 Lemma pairP X Y Z (f g : C Z (X × Y)) :
   'π1 ∘ f = 'π1 ∘ g /\ 'π2 ∘ f = 'π2 ∘ g -> f = g.
-Proof.
-move: f g; rewrite /cat_proj1 /cat_proj2 /cat_pair /cat_prod.
-by case: (ProdCat.mixin _) => /= ???? _ _; apply.
-Qed.
+Proof. exact: (ProdCat.pairP (ProdCat.axioms _)). Qed.
 
 Lemma comp_pair X Y Z W (f : C Z X) (g : C Z Y) (h : C W Z) :
   ⟨f, g⟩ ∘ h = ⟨f ∘ h, g ∘ h⟩.
@@ -829,12 +830,9 @@ Definition prod_cat_proj1 (C D : catType@{i}) : {functor C * D -> C} :=
 Definition prod_cat_proj2 (C D : catType@{i}) : {functor C * D -> D} :=
   Functor snd (fun _ _ f => f.2) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
 
-Program Definition cat_prodCatMixin : ProdCat.mixin_of@{j} _ :=
-  @ProdCatMixin cat_catType prod_cat_catType prod_cat_pair prod_cat_proj1 prod_cat_proj2 _ _ _.
-
-Next Obligation. by move=> *; apply/eq_functor. Qed.
-Next Obligation. by move=> *; apply/eq_functor. Qed.
-Next Obligation.
+Lemma cat_prodP : ProdCat.axioms_of@{j} prod_cat_pair prod_cat_proj1 prod_cat_proj2.
+Proof.
+split; try by move=> *; apply/eq_functor.
 move=> /= C D E [/= F0 F1 Fmap1 FmapD] [/= G0 G1 Gmap1 GmapD].
 case=> [/eq_functor /= e1 /eq_functor /= e2].
 have e_obj : F0 = G0.
@@ -855,11 +853,13 @@ move: (congr1 (fun H => H X Y f) e1) (congr1 (fun H => H X Y f) e2).
 by case: (F1 X Y f) (G1 X Y f)=> [??] [??] /= -> ->.
 Qed.
 
+Definition cat_prodCatMixin : ProdCat.mixin_of@{j} _ :=
+  @ProdCatMixin cat_catType@{i j} _ _ _ _ cat_prodP.
+
 Canonical cat_prodCatType : prodCatType@{j} :=
   Eval hnf in ProdCatType catType functor cat_prodCatMixin.
 
 End CatProdCat.
-
 
 Module CartCat.
 
@@ -932,15 +932,23 @@ Section ClassDef.
 
 Universe i.
 
-Record mixin_of (C : cartCatType@{i}) := Mixin {
-  exp   : C -> C -> C;
-  curry : forall X Y Z, C (X × Y) Z -> C X (exp Y Z);
-  eval  : forall {X Y}, C (exp X Y × X) Y;
-  _     : forall X Y Z (f : C (X × Y) Z),
-            eval ∘ ⟨curry f ∘ 'π1, 'π2⟩ = f;
-  _     : forall X Y Z (f : C X (exp Y Z)),
-            curry (eval ∘ ⟨f ∘ 'π1, 'π2⟩) = f
+Record axioms_of (C : cartCatType@{i})
+                 (exp : C -> C -> C)
+                 (curry : forall {X Y Z}, C (X × Y) Z -> C X (exp Y Z))
+                 (eval : forall {X Y}, C (exp X Y × X) Y) := Ax {
+  curryK : forall X Y Z (f : C (X × Y) Z),
+             eval ∘ ⟨curry f ∘ 'π1, 'π2⟩ = f;
+  evalK  : forall X Y Z (f : C X (exp Y Z)),
+             curry (eval ∘ ⟨f ∘ 'π1, 'π2⟩) = f
 }.
+
+Record mixin_of (C : cartCatType@{i}) := Mixin {
+  exp; curry; eval; _ : @axioms_of C exp curry eval
+}.
+
+Definition axioms (C : cartCatType@{i}) (m : mixin_of C) :=
+  let: Mixin _ _ _ ax := m return axioms_of (curry m) (eval m) in
+  ax.
 
 Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
   base : CartCat.class_of hom;
@@ -1008,21 +1016,17 @@ Definition curry (X Y Z : C) (f : C (X × Y) Z) : C X (Y ⇒ Z) :=
   CCCat.curry (CCCat.mixin (CCCat.class C)) f.
 Local Notation "'λ' f" := (curry f) (at level 0, f at level 9).
 Definition eval (X Y : C) : C ((X ⇒ Y) × X) Y :=
-  CCCat.eval (CCCat.mixin (CCCat.class C)).
+  CCCat.eval (CCCat.mixin (CCCat.class C)) X Y.
 Arguments eval {_ _}.
 
 Definition uncurry X Y Z (f : C X (Y ⇒ Z)) : C (X × Y) Z :=
   eval ∘ ⟨f ∘ 'π1, 'π2⟩.
 
 Lemma curryK X Y Z (f : C (X × Y) Z) : uncurry λ f = f.
-Proof.
-by rewrite /uncurry /= /exp /curry /eval; case: (CCCat.mixin _)=> /=.
-Qed.
+Proof. exact: (CCCat.curryK (CCCat.axioms _)). Qed.
 
 Lemma uncurryK X Y Z (f : C X (Y ⇒ Z)) : λ (uncurry f) = f.
-Proof.
-by move: f; rewrite /uncurry /= /exp /curry /eval; case: (CCCat.mixin _)=> /=.
-Qed.
+Proof. exact: (CCCat.evalK (CCCat.axioms _)). Qed.
 
 Lemma comp_curry X1 X2 Y Z (f : C (X2 × Y) Z) (g : C X1 X2) :
   λ f ∘ g = λ (f ∘ ⟨g ∘ 'π1, 'π2⟩).
@@ -1059,7 +1063,7 @@ End CCCatTheory.
 
 Section CatCCCat.
 
-Universe i.
+Universe i j.
 
 Program Definition functor_curry
   (C D E : catType@{i}) (F : {functor C * D -> E})
@@ -1108,22 +1112,16 @@ Qed.
 
 Arguments functor_eval {_ _}.
 
-Lemma functor_curryK (C D E : catType@{i}) (F : {functor C * D -> E}) :
-  functor_eval ∘ ⟨functor_curry F ∘ 'π1, 'π2⟩ = F.
+Lemma functor_ccCatAxioms@{} : CCCat.axioms_of@{j} functor_curry (@functor_eval).
 Proof.
-apply/eq_functor=> /=; congr Tagged.
-apply: functional_extensionality_dep=> - [X1 Y1].
-apply: functional_extensionality_dep=> - [X2 Y2].
-apply: functional_extensionality=> - [/= f g].
-by rewrite -fmapD prod_cat_compE /= comp1f compf1.
-Qed.
-
+split.
+  move=> /= C D E F; apply/eq_functor=> /=; congr Tagged.
+  apply: functional_extensionality_dep=> - [X1 Y1].
+  apply: functional_extensionality_dep=> - [X2 Y2].
+  apply: functional_extensionality=> - [/= f g].
+  by rewrite -fmapD prod_cat_compE /= comp1f compf1.
 (* FIXME: This proof is horrible *)
-Lemma functor_uncurryK (C D E : catType@{i})
-  (F : {functor C -> {functor D -> E}}) :
-  functor_curry (functor_eval ∘ ⟨F ∘ 'π1, 'π2⟩) = F.
-Proof.
-apply/eq_functor=> /=; apply: eq_Tagged=> /=.
+move=> /= C D E F; apply/eq_functor=> /=; apply: eq_Tagged=> /=.
 - apply: functional_extensionality=> X.
   apply/eq_functor; congr Tagged=> /=.
   apply: functional_extensionality_dep=> Y1.
@@ -1142,12 +1140,13 @@ apply/eq_functor=> /=; apply: eq_Tagged=> /=.
                       (fun F => forall Y, E (F X1 Y) (F X2 Y)) _ _ p
                     (fun F => @nt_val D E (F X1) (F X2)) α).
   rewrite /= sapp_cast fmap1 compf1 cast_congr1 /= {α}.
-  rewrite (_ : congr1 _ p = congr1 (fun H : C -> D -> E => E (H X1 Y) (H X2 Y)) (congr1 (fun F X => fobj (F X)) p)).
+  rewrite (_ : congr1 _ p = congr1 (fun H : C -> D -> E => E (H X1 Y) (H X2 Y))
+                                   (congr1 (fun F X => fobj (F X)) p)).
     by move: (congr1 _ p)=> /= => q; rewrite (proof_irrelevance _ q  erefl) /=.
   exact: proof_irrelevance.
 Qed.
 
-Definition cat_ccCatMixin := CCCatMixin functor_curryK functor_uncurryK.
+Definition cat_ccCatMixin@{} := CCCatMixin functor_ccCatAxioms.
 Canonical cat_ccCatType :=
   Eval hnf in CCCatType catType@{i} functor@{i} cat_ccCatMixin.
 
