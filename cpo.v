@@ -360,6 +360,10 @@ Canonical op_catType :=
 Definition of_op X Y (f : op_hom X Y) : C Y X := f.
 Definition to_op X Y (f : C X Y) : op_hom Y X := f.
 
+Lemma op_compE X Y Z (f : op_hom Y Z) (g : op_hom X Y) :
+  f ∘ g = of_op g ∘ of_op f.
+Proof. by []. Qed.
+
 End Opposite.
 
 Notation "C '^op'" := (op_catType C)
@@ -423,7 +427,7 @@ Definition sfun_catMixin :=
         (fun _ _ _ => erefl) (fun _ _ _ => erefl)
         (fun _ _ _ _ _ _ _ => erefl) (fun _ _ _ _ _ _ _ => erefl)).
 
-Canonical Fun := CatType Type sfun sfun_catMixin.
+Canonical Sets := CatType Type@{i} sfun@{i} sfun_catMixin.
 
 Lemma fun_compE (T S R : Type) (f : sfun S R) (g : sfun T S) (x : T) :
   (f ∘ g) x = f (g x).
@@ -860,6 +864,34 @@ Canonical cat_prodCatType : prodCatType@{j} :=
   Eval hnf in ProdCatType catType functor cat_prodCatMixin.
 
 End CatProdCat.
+
+Section HomFunctor.
+
+Universe i j.
+
+Variable C : catType@{i}.
+
+Definition hom_fobj (X : C^op * C) : Type@{i} := C X.1 X.2.
+Definition hom_fmap (X Y : C^op * C) (f : (C^op × C) X Y) :
+  sfun (hom_fobj X) (hom_fobj Y) :=
+  fun g => f.2 ∘ g ∘ f.1.
+Lemma hom_fmap1 (X : C^op * C) :
+  hom_fmap 1 = 1 :> sfun (hom_fobj X) (hom_fobj X).
+Proof.
+apply/functional_extensionality=> f; rewrite /hom_fmap /=.
+by rewrite comp1f compf1.
+Qed.
+Lemma hom_fmapD (X Y Z : C^op * C) (f : (C^op × C) Y Z) (g : (C^op × C) X Y) :
+  hom_fmap (f ∘ g) = hom_fmap f ∘ hom_fmap g.
+Proof.
+apply/functional_extensionality=> x; rewrite /hom_fmap /= !fun_compE.
+by rewrite op_compE !compA.
+Qed.
+
+Definition hom_functor@{} : {functor C^op * C -> Sets@{i j}} :=
+  Functor hom_fobj hom_fmap@{j} hom_fmap1@{j} hom_fmapD.
+
+End HomFunctor.
 
 Module CartCat.
 
