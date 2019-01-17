@@ -1273,6 +1273,94 @@ Definition const X Y (x : consts Y) : C X Y := of_const x ∘ '!.
 
 End ConstCatTheory.
 
+Section CatConstCat.
+
+Universe i j.
+
+Definition cat_consts (C : catType@{i}) := Cat.obj C.
+Program Definition cat_of_consts (C : catType@{i}) (X : cat_consts C) :
+  {functor cat_term -> C} :=
+  Functor (fun _ => X) (fun _ _ _ => 1) (fun _ => erefl) _.
+
+Next Obligation. by move=> C X ????? /=; rewrite comp1f. Qed.
+
+Definition cat_constCatMixin := ConstCatMixin cat_of_consts.
+Canonical cat_constCatType :=
+  Eval hnf in ConstCatType catType@{i} functor@{i} cat_constCatMixin.
+
+End CatConstCat.
+
+Section FunctorTermCat.
+
+Universe i.
+
+Variables (C : catType@{i}) (D : termCatType@{i}).
+
+Definition functor_term : {functor C -> D} := const C term.
+Program Definition functor_bang (F : {functor C -> D}) : nat_trans F functor_term :=
+  NatTrans (fun X => '!) _.
+Next Obligation. by move=> F X Y f /=; rewrite [RHS]bangP comp1f. Qed.
+
+Lemma functor_bangP F (α : nat_trans F functor_term) : α = functor_bang F.
+Proof. apply/eq_nat_trans=> X /=; exact: bangP. Qed.
+
+Definition functor_termCatMixin :=
+  TermCatMixin functor_bangP.
+Canonical functor_termCatType :=
+  Eval hnf in TermCatType (functor C D) (@nat_trans C D) functor_termCatMixin.
+
+End FunctorTermCat.
+
+Section FunctorProdCat.
+
+Universe i.
+
+Variables (C : catType@{i}) (D : prodCatType@{i}).
+
+Definition functor_prod (F G : {functor C -> D}) : {functor C -> D} :=
+  prod_functor@{i} D ∘ ⟨F, G⟩.
+
+Program Definition functor_pair (F G H : {functor C -> D})
+  (α : nat_trans H F) (β : nat_trans H G) :
+  nat_trans H (functor_prod F G) :=
+  NatTrans (fun X => ⟨α X, β X⟩) _.
+
+Next Obligation.
+move=> F G H α β X Y f /=; unfold prod_fmap; rewrite /=.
+by rewrite comp_pair -!compA pairKL pairKR !nt_valP -comp_pair.
+Qed.
+
+Program Definition functor_proj1 (F G : {functor C -> D}) :
+  nat_trans (functor_prod F G) F :=
+  NatTrans (fun X => 'π1) _.
+
+Next Obligation.
+by move=> F G X Y f /=; unfold prod_fmap; rewrite /= pairKL.
+Qed.
+
+Program Definition functor_proj2 (F G : {functor C -> D}) :
+  nat_trans (functor_prod F G) G :=
+  NatTrans (fun X => 'π2) _.
+
+Next Obligation.
+by move=> F G X Y f /=; unfold prod_fmap; rewrite /= pairKR.
+Qed.
+
+Lemma functor_prodP : ProdCat.axioms_of functor_pair functor_proj1 functor_proj2.
+Proof.
+split.
+- by move=> /= F G H α β; apply/eq_nat_trans=> X /=; rewrite pairKL.
+- by move=> /= F G H α β; apply/eq_nat_trans=> X /=; rewrite pairKR.
+- move=> /= F G H α β [/eq_nat_trans /= H1 /eq_nat_trans /= H2].
+  apply/eq_nat_trans=> X; apply: pairP; split; [exact: H1|exact: H2].
+Qed.
+
+Definition functor_prodCatMixin := ProdCatMixin functor_prodP.
+Canonical functor_prodCatType :=
+  Eval hnf in ProdCatType (functor C D) (@nat_trans C D) functor_prodCatMixin.
+
+End FunctorProdCat.
+
 Definition constfun (T S : Type) (x : S) (y : T) := x.
 
 Unset Universe Polymorphism.
