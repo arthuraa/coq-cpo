@@ -320,6 +320,13 @@ Proof. by rewrite /comp; case: (@Cat.class C)=> ?? []. Qed.
 
 Definition compp X Y Z (p : C Y Z * C X Y) : C X Z := p.1 ∘ p.2.
 
+Record iso X Y := Iso {
+  iso1  : C X Y;
+  iso2  : C Y X;
+  iso1K : iso2 ∘ iso1 = 1;
+  iso2K : iso1 ∘ iso2 = 1
+}.
+
 End CatTheory.
 
 Notation "g ∘ f" := (comp g f) : cat_scope.
@@ -414,6 +421,9 @@ Canonical indisc_catType :=
   Eval hnf in CatType indisc_obj indisc_hom indisc_catMixin.
 
 End IndiscCat.
+
+Definition unify_uni@{i} (T S : Type@{i}) (x : S) : S := x.
+Definition type_of@{i} (T : Type@{i}) (x : T) := T.
 
 Section FunCat.
 
@@ -651,6 +661,7 @@ End TermCatTheory.
 Local Notation "'!" := (bang _) (at level 0) : cat_scope.
 Local Notation "''!_' X" := (bang X)
   (at level 0, X at level 9, format "''!_' X") : cat_scope.
+Arguments term {_}.
 
 Section TermCatCat.
 
@@ -1093,6 +1104,10 @@ Definition exp_functor : {functor C^op × C -> C} :=
 
 End CCCatTheory.
 
+Local Notation "X ⇒ Y" := (exp X Y)
+  (at level 25, right associativity) : cat_scope.
+Local Notation "'λ' f" := (curry f) (at level 0, f at level 9) : cat_scope.
+
 Section CatCCCat.
 
 Universe i j.
@@ -1174,7 +1189,7 @@ move=> /= C D E F; apply/eq_functor=> /=; apply: eq_Tagged=> /=.
   rewrite /= sapp_cast fmap1 compf1 cast_congr1 /= {α}.
   rewrite (_ : congr1 _ p = congr1 (fun H : C -> D -> E => E (H X1 Y) (H X2 Y))
                                    (congr1 (fun F X => fobj (F X)) p)).
-    by move: (congr1 _ p)=> /= => q; rewrite (proof_irrelevance _ q  erefl) /=.
+    by move: (congr1 _ p)=> /= => q; rewrite (proof_irrelevance _ q erefl) /=.
   exact: proof_irrelevance.
 Qed.
 
@@ -1184,7 +1199,81 @@ Canonical cat_ccCatType :=
 
 End CatCCCat.
 
-Definition const (T S : Type) (x : S) (y : T) := x.
+Module ConstCat.
+
+Section ClassDef.
+
+Universe i.
+
+(* Ideally, this would say that consts is a functor that is represented by
+   C(term, -), but this seems tricky to get right with universes *)
+
+Record mixin_of (C : termCatType@{i}) := Mixin {
+  consts   : C -> Type@{i};
+  of_const : forall X, consts X -> C term X;
+}.
+
+Record class_of (C : Type@{i}) (hom : C -> C -> Type@{i}) := Class {
+  base  : TermCat.class_of hom;
+  mixin : mixin_of (TermCat.Pack base)
+}.
+
+Record type := Pack {
+  obj : Type@{i};
+  hom : obj -> obj -> Type@{i};
+  _   : class_of hom
+}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion hom : type >-> Funclass.
+Local Coercion base : class_of >-> TermCat.class_of.
+Variables (C0 : Type@{i}) (C1 : C0 -> C0 -> Type@{i}) (cC : type).
+Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
+Definition clone c of phant_id class c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ class.
+Definition termCatType := @TermCat.Pack _ _ class.
+
+Definition pack :=
+  [find cc | @TermCat.hom cc ~ C1 | "not a termCatType" ]
+  [find cb | @TermCat.class cc ~ cb ]
+  fun m => @Pack C0 C1 (@Class _ _ cb m).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion base : class_of >-> TermCat.class_of.
+Coercion catType : type >-> Cat.type.
+Canonical catType.
+Coercion termCatType : type >-> TermCat.type.
+Canonical termCatType.
+Notation ConstCatMixin := Mixin.
+Notation constCatType := type.
+Notation ConstCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
+End Exports.
+
+End ConstCat.
+
+Export ConstCat.Exports.
+
+Section ConstCatTheory.
+
+Universe i.
+
+Variable C : constCatType@{i}.
+
+Definition consts X :=
+  @ConstCat.consts C (ConstCat.mixin _) X.
+
+Definition of_const X (x : consts X) : C term X :=
+  @ConstCat.of_const C (ConstCat.mixin _) X x.
+
+Definition const X Y (x : consts Y) : C X Y := of_const x ∘ '!.
+
+End ConstCatTheory.
+
+Definition constfun (T S : Type) (x : S) (y : T) := x.
 
 Unset Universe Polymorphism.
 
@@ -1633,11 +1722,11 @@ rewrite (proof_irrelevance _ e (erefl x)).
 by apply: val_inj.
 Qed.
 
-Lemma monotone_const (T S : poType) (x : S) : monotone (@const T S x).
+Lemma monotone_const (T S : poType) (x : S) : monotone (@constfun T S x).
 Proof. by move=> ???; reflexivity. Qed.
 
 Definition mono_const (T S : poType) (x : S) : {mono T -> S} :=
-  Eval hnf in Sub (@const T S x) (monotone_const x).
+  Eval hnf in Sub (@constfun T S x) (monotone_const x).
 Canonical mono_const.
 
 Lemma mono_comp_constL (T S R : poType) (x : R) (f : {mono T -> S}) :
@@ -2792,9 +2881,9 @@ apply: sup_unique; split.
   by split.
 move=> y ub_y; rewrite cont_f1.
 case: (supP (f ∘ mono_pairf (mono_fst ∘ x) (mono_const _ (sup (mono_snd ∘ x))))).
-move=> _; apply=> n; rewrite /=; unfold pairf; rewrite /const /= cont_f2.
+move=> _; apply=> n; rewrite /=; unfold pairf; rewrite /constfun /= cont_f2.
 case: (supP (f ∘ mono_pairf (mono_const _ (x n).1) (mono_snd ∘ x))).
-move=> _; apply=> m; rewrite /=; unfold pairf; rewrite /const /=.
+move=> _; apply=> m; rewrite /=; unfold pairf; rewrite /constfun /=.
 by apply: transitivity (ub_y (maxn n m)); apply: monoP; split=> /=;
 apply monoP; apply: monoP; [exact: leq_maxl|exact: leq_maxr].
 Qed.
@@ -3544,7 +3633,7 @@ Proof.
 split.
 - apply/eq_cont; move=> /= x; apply: val_inj.
   by apply: functional_extensionality=> - [].
-- by move=> x; rewrite /= /const /=; apply: botP.
+- by move=> x; rewrite /= /constfun /=; apply: botP.
 Qed.
 
 Definition chain_mor0 : {retr 'X_1 -> 'X_0} :=
