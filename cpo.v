@@ -1367,18 +1367,24 @@ Definition constfun (T S : Type) (x : S) (y : T) := x.
 
 Unset Universe Polymorphism.
 
+Universe u0.
+Universe u1.
+Constraint u0 < u1.
+Notation Type0 := Type@{u0}.
+Notation Type1 := Type@{u1}.
+
 Module Choice.
 
-Variant mixin_of (T : Type) :=
+Variant mixin_of (T : Type0) :=
   Mixin of forall (P : T -> Prop), (exists! x, P x) -> {x : T | P x}.
 
 Notation class_of := mixin_of (only parsing).
 
 Section ClassDef.
 
-Record type := Pack {sort : Type; base : class_of sort}.
+Record type : Type1 := Pack {sort : Type0; base : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
-Variables (T : Type) (cT : type).
+Variables (T : Type0) (cT : type).
 
 Definition class := let: Pack _ c := cT return class_of cT in c.
 
@@ -1636,10 +1642,10 @@ End SingletonMap.
 
 Module Po.
 
-Definition axioms T (appr : relation T) :=
+Definition axioms (T : Type0) (appr : relation T) :=
   [/\ reflexive T appr, transitive T appr & antisymmetric T appr].
 
-Record mixin_of T := Mixin {
+Record mixin_of (T : Type0) := Mixin {
   appr : relation T;
   _    : axioms appr
 }.
@@ -1648,9 +1654,9 @@ Notation class_of := mixin_of.
 
 Section ClassDef.
 
-Record type := Pack {sort; base : class_of sort}.
+Record type : Type1 := Pack {sort : Type0; base : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
-Variables (T : Type) (cT : type).
+Variables (T : Type0) (cT : type).
 
 Definition class := let: Pack _ c := cT return class_of cT in c.
 
@@ -2169,16 +2175,16 @@ Module PoChoice.
 
 Section ClassDef.
 
-Record class_of T := Class {
+Record class_of (T : Type0) := Class {
   base_po : Po.class_of T;
   base_choice : Choice.class_of T
 }.
 
-Record type := Pack {sort; _ : class_of sort}.
+Record type : Type1 := Pack {sort : Type0; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
 Local Coercion base_po : class_of >-> Po.class_of.
 Local Coercion base_choice : class_of >-> Choice.class_of.
-Variables (T : Type) (cT : type).
+Variables (T : Type0) (cT : type).
 Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
 Definition clone c of phant_id class c := @Pack T c.
 Let xT := let: Pack T _ := cT in T.
@@ -2412,13 +2418,13 @@ Record mixin_of (T : poType) := Mixin {
 
 Section ClassDef.
 
-Record class_of T :=
+Record class_of (T : Type0) :=
   Class {base: PoChoice.class_of T; mixin : mixin_of (Po.Pack base)}.
 Local Coercion base : class_of >-> PoChoice.class_of.
 
-Record type := Pack {sort; _ : class_of sort}.
+Record type : Type1 := Pack {sort : Type0; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
-Variables (T : Type) (cT : type).
+Variables (T : Type0) (cT : type).
 Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
 Definition clone c of phant_id class c := @Pack T c.
 Let xT := let: Pack T _ := cT in T.
@@ -2554,13 +2560,13 @@ Module Pcpo.
 
 Section ClassDef.
 
-Record class_of T :=
+Record class_of (T : Type0) :=
   Class {base: Cpo.class_of T; mixin : Ppo.mixin_of (Po.Pack base)}.
 Local Coercion base : class_of >-> Cpo.class_of.
 
-Record type := Pack {sort; _ : class_of sort}.
+Record type : Type1 := Pack {sort : Type0; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
-Variables (T : Type) (cT : type).
+Variables (T : Type0) (cT : type).
 Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
 Definition clone c of phant_id class c := @Pack T c.
 Let xT := let: Pack T _ := cT in T.
@@ -3674,25 +3680,27 @@ Module CpoCat.
 
 Section ClassDef.
 
-Record mixin_of (C : catType) := Mixin {
-  cpo_mixin : forall X Y, Cpo.class_of (C X Y);
-  comp_mono : forall X Y Z, @monotone [poType of Cpo.Pack (cpo_mixin Y Z) *
-                                                 Cpo.Pack (cpo_mixin X Y)]
-                                      (Cpo.Pack (cpo_mixin X Z))
-                                      (fun fg => fg.1 ∘ fg.2);
+Record mixin_of
+    (obj : Type1) (hom : obj -> obj -> Type0)
+    (comp : forall X Y Z, hom Y Z -> hom X Y -> hom X Z) := Mixin {
+  hom_base : forall X Y, Cpo.class_of (hom X Y);
+  comp_mono : forall X Y Z, @monotone [poType of Cpo.Pack (hom_base Y Z) *
+                                                 Cpo.Pack (hom_base X Y)]
+                                      (Cpo.Pack (hom_base X Z))
+                                      (fun fg => comp _ _ _ fg.1 fg.2);
   comp_cont : forall X Y Z, continuous (Mono _ (@comp_mono X Y Z))
 }.
 
-Record class_of obj (hom : obj -> obj -> Type) := Class {
-  base  : Cat.mixin_of hom;
-  mixin : mixin_of (Cat.Pack base)
+Record class_of (obj : Type1) (hom : obj -> obj -> Type0) := Class {
+  base  : Cat.mixin_of@{u1} hom;
+  mixin : mixin_of (@comp (Cat.Pack@{u1} base))
 }.
 
-Record type := Pack {obj; hom : obj -> obj -> Type; class : class_of hom}.
+Record type := Pack {obj : Type1; hom : obj -> obj -> Type0; class : class_of hom}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion hom : type >-> Funclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
-Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Variables (C0 : Type@{u1}) (C1 : C0 -> C0 -> Type0) (cC : type).
 Definition clone c of phant_id (class cC) c := @Pack C0 C1 c.
 
 Definition catType := @Cat.Pack _ _ (class cC).
@@ -3716,6 +3724,19 @@ Notation CpoCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
 End Exports.
 
 End CpoCat.
+
+Export CpoCat.Exports.
+
+Section CpoCpoCat.
+
+Definition cpo_cpoCatMixin :=
+  @CpoCatMixin _ _ cont_comp (fun T S => Cpo.class (cont_cpoType T S))
+               monotone_cont_compp continuous_cont_compp.
+
+Canonical cpo_cpoCatType :=
+  Eval hnf in CpoCatType cpoType cont cpo_cpoCatMixin.
+
+End CpoCpoCat.
 
 Record lc_functor := LcFunctor {
   f_obj :> cpoType -> cpoType -> pcpoType;
