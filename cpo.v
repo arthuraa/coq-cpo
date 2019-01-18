@@ -639,7 +639,9 @@ Export TermCat.Exports.
 
 Section TermCatTheory.
 
-Variable C : termCatType.
+Universe i.
+
+Variable C : termCatType@{i}.
 
 Definition term : C :=
   TermCat.term (TermCat.mixin (TermCat.class C)).
@@ -1767,6 +1769,13 @@ Proof. by apply: val_inj. Qed.
 Definition mono_catMixin := CatMixin (And3 mono_comp1f mono_compf1 mono_compA).
 Canonical mono_catType :=
   Eval hnf in CatType poType mono mono_catMixin.
+
+Definition isotone (T S : poType) (f : T -> S) :=
+  forall x y, f x ⊑ f y = x ⊑ y.
+
+Lemma iso_mono (T S : poType) (f : T -> S) :
+  isotone f -> monotone f.
+Proof. by move=> iso_f x y; rewrite iso_f. Qed.
 
 Definition unit_appr (x y : unit) := True.
 
