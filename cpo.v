@@ -3670,6 +3670,53 @@ Qed.
 
 End BiLimit.
 
+Module CpoCat.
+
+Section ClassDef.
+
+Record mixin_of (C : catType) := Mixin {
+  cpo_mixin : forall X Y, Cpo.class_of (C X Y);
+  comp_mono : forall X Y Z, @monotone [poType of Cpo.Pack (cpo_mixin Y Z) *
+                                                 Cpo.Pack (cpo_mixin X Y)]
+                                      (Cpo.Pack (cpo_mixin X Z))
+                                      (fun fg => fg.1 ∘ fg.2);
+  comp_cont : forall X Y Z, continuous (Mono _ (@comp_mono X Y Z))
+}.
+
+Record class_of obj (hom : obj -> obj -> Type) := Class {
+  base  : Cat.mixin_of hom;
+  mixin : mixin_of (Cat.Pack base)
+}.
+
+Record type := Pack {obj; hom : obj -> obj -> Type; class : class_of hom}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion hom : type >-> Funclass.
+Local Coercion base : class_of >-> Cat.mixin_of.
+Variables (C0 : Type) (C1 : C0 -> C0 -> Type) (cC : type).
+Definition clone c of phant_id (class cC) c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ (class cC).
+
+Definition pack :=
+  [find c : Cat.type | @Cat.hom c ~ C1 | "not a catType" ]
+  [find b : Cat.mixin_of _ | Cat.class c ~ b ]
+  fun m => @Pack C0 C1 (@Class _ _ b m).
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion base : class_of >-> Cat.mixin_of.
+Coercion catType : type >-> Cat.type.
+Canonical catType.
+Notation cpoCatType := type.
+Notation CpoCatMixin := Mixin.
+Notation CpoCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
+End Exports.
+
+End CpoCat.
+
 Record lc_functor := LcFunctor {
   f_obj :> cpoType -> cpoType -> pcpoType;
   f_mor :  forall {T1 T2 S1 S2 : cpoType},
