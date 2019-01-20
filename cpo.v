@@ -1367,6 +1367,7 @@ Definition constfun (T S : Type) (x : S) (y : T) := x.
 
 Unset Universe Polymorphism.
 
+(* FIXME: These notations are not being printed correctly *)
 Universe u0.
 Universe u1.
 Constraint u0 < u1.
@@ -2911,6 +2912,18 @@ Definition cont_const (T S : cpoType) (x : S) : {cont T -> S} :=
   Eval hnf in Sub (@mono_const T S x) (continuous_const x).
 Canonical cont_const.
 
+Definition pcpo_cont (T S : pcpoType) := cont T S.
+Definition pcpo_contP : @Cat.axioms pcpoType pcpo_cont
+                                    (fun T S R f g => f ∘ g)
+                                    (fun T => 1).
+Proof.
+by split; move=> *; rewrite ?comp1f ?compf1 ?compA.
+Qed.
+
+Definition pcpo_cont_catMixin := CatMixin pcpo_contP.
+Canonical pcpo_cont_catType :=
+  Eval hnf in CatType pcpoType pcpo_cont pcpo_cont_catMixin.
+
 Section ProdCpo.
 
 Variables T S : cpoType.
@@ -3735,6 +3748,15 @@ Definition cpo_cpoCatMixin :=
 
 Canonical cpo_cpoCatType :=
   Eval hnf in CpoCatType cpoType cont cpo_cpoCatMixin.
+
+Definition pcpo_cpoCatMixin :=
+  @CpoCatMixin pcpoType (fun T S => cont T S)
+               (fun T S R f g => f ∘ g)
+               (fun T S => Cpo.class (cont_cpoType T S))
+               monotone_cont_compp continuous_cont_compp.
+
+Canonical pcpo_cpoCatType :=
+  Eval hnf in CpoCatType pcpoType (fun T S => cont T S) pcpo_cpoCatMixin.
 
 End CpoCpoCat.
 
