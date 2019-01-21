@@ -303,6 +303,7 @@ Constraint i <= j.
 
 Variable C : catType@{i j}.
 
+Definition hom := @Cat.hom@{i j} C.
 Definition comp := @Cat.comp@{i j} _ _ (@Cat.class C).
 Definition cat_id := @Cat.id@{i j} _ _ (@Cat.class C).
 Arguments cat_id {_}.
@@ -379,6 +380,29 @@ End Opposite.
 
 Notation "C '^op'" := (op_catType C)
   (at level 2, left associativity, format "C ^op") : cat_scope.
+
+Section CatBaseChange.
+
+Universes i j.
+Constraint i <= j.
+
+Variables (T : Type@{j}) (C : catType@{i j}) (f : T -> C).
+
+Definition base_change_hom (X Y : T) := C (f X) (f Y).
+
+Notation base_change_comp :=
+  (fun (X Y Z : T) (f : base_change_hom Y Z) (g : base_change_hom X Y) =>
+     f ∘ g).
+
+Notation base_change_id := (fun (X : T) => 1).
+
+Lemma base_change_compP :
+  @Cat.axioms T base_change_hom base_change_comp base_change_id.
+Proof. by split=> *; rewrite ?comp1f ?compf1 ?compA. Qed.
+
+Definition BaseChangeCatMixin := CatMixin base_change_compP.
+
+End CatBaseChange.
 
 Section DiscCat.
 
@@ -904,17 +928,17 @@ Variable C : catType@{i j}.
 
 Definition hom_fobj (X : prod@{j} C^op C) : Type@{i} := C X.1 X.2.
 Definition hom_fmap (X Y : prod@{j} C^op C)
-                    (f : Cat.hom _ X Y) :
+                    (f : hom _ X Y) :
   sfun (hom_fobj X) (hom_fobj Y) :=
   fun g => f.2 ∘ g ∘ f.1.
 Lemma hom_fmap1 (X : prod@{j} C^op C) :
-  hom_fmap (cat_id@{i j} _) = cat_id@{i j} _ :> sfun (hom_fobj X) (hom_fobj X).
+  hom_fmap (cat_id@{i j} X) = cat_id@{i j} (hom_fobj X).
 Proof.
 apply/functional_extensionality=> f; rewrite /hom_fmap /=.
 by rewrite comp1f compf1.
 Qed.
 Lemma hom_fmapD (X Y Z : prod@{j} C^op C)
-  (f : prod_cat_catType@{i j} C^op C Y Z) (g : Cat.hom _ X Y) :
+  (f : prod_cat_catType@{i j} C^op C Y Z) (g : hom _ X Y) :
   hom_fmap (comp@{i j} f g) = comp@{i j} (hom_fmap f) (hom_fmap g).
 Proof.
 apply/functional_extensionality=> x; rewrite /hom_fmap /= !fun_compE.
@@ -1052,7 +1076,6 @@ End ClassDef.
 
 Module Exports.
 Coercion obj : type >-> Sortclass.
-Coercion hom : type >-> Funclass.
 Coercion base : class_of >-> CartCat.class_of.
 Coercion catType : type >-> Cat.type.
 Canonical catType.
@@ -1107,7 +1130,7 @@ by rewrite -[in RHS]compA pairKL pairKR compA.
 Qed.
 
 Definition exp_fobj (X : C^op * C) := X.1 ⇒ X.2.
-Definition exp_fmap (X Y : C^op * C) (f : Cat.hom _ X Y) :
+Definition exp_fmap (X Y : C^op * C) (f : hom _ X Y) :
   C (exp_fobj X) (exp_fobj Y) :=
   λ (f.2 ∘ eval ∘ ⟨'π1, of_op f.1 ∘ 'π2⟩).
 Lemma exp_fmap1 (X : C^op * C) :
@@ -2890,6 +2913,10 @@ Proof. by apply: val_inj; rewrite /= comp1f. Qed.
 Definition cont_catMixin := CatMixin (And3 cont_comp1f cont_compf1 cont_compA).
 Canonical cont_catType := Eval hnf in CatType cpoType cont cont_catMixin.
 
+Definition pcpo_catMixin := BaseChangeCatMixin _ Pcpo.cpoType.
+Canonical pcpo_catType :=
+  Eval hnf in CatType pcpoType _ pcpo_catMixin.
+
 Lemma cont_compE (T S R : cpoType)
   (f : {cont S -> R}) (g : {cont T -> S}) (x : T)
   : (f ∘ g) x = f (g x).
@@ -3726,27 +3753,56 @@ Module CpoCat.
 
 Section ClassDef.
 
-Record mixin_of
-    (obj : Type1) (hom : obj -> obj -> Type0)
-    (comp : forall X Y Z, hom Y Z -> hom X Y -> hom X Z) := Mixin {
-  hom_base : forall X Y, Cpo.class_of (hom X Y);
-  comp_mono : forall X Y Z, @monotone [poType of Cpo.Pack (hom_base Y Z) *
-                                                 Cpo.Pack (hom_base X Y)]
-                                      (Cpo.Pack (hom_base X Z))
-                                      (fun fg => comp _ _ _ fg.1 fg.2);
-  comp_cont : forall X Y Z, continuous (Mono _ (@comp_mono X Y Z))
+Set Primitive Projections.
+
+Record mixin_of (C : catType@{u0 u1}) := Mixin {
+  hom_base : forall X Y, Cpo.class_of (C X Y);
+  comp_mono : forall X Y Z,
+    @monotone [poType of Cpo.Pack (hom_base Y Z) *
+                         Cpo.Pack (hom_base X Y)]
+              (Cpo.Pack (hom_base X Z))
+              (fun fg => fg.1 ∘ fg.2);
+  comp_mono' : forall X Y Z,
+    @monotone [poType of Cpo.Pack (hom_base Z Y) *
+                         Cpo.Pack (hom_base Y X)]
+              (Cpo.Pack (hom_base Z X))
+              (fun fg => fg.2 ∘ fg.1);
+  comp_cont : forall X Y Z, continuous (Mono _ (@comp_mono X Y Z));
+  comp_cont' : forall X Y Z, continuous (Mono _ (@comp_mono' X Y Z))
 }.
+
+Lemma pack_mixin (C  : catType@{u0 u1})
+                 (cC : forall X Y, Cpo.class_of (C X Y))
+                 (cm : forall X Y Z, @monotone [poType of Cpo.Pack (cC Y Z) *
+                                                          Cpo.Pack (cC X Y)]
+                                               (Cpo.Pack (cC X Z))
+                                               (fun fg => fg.1 ∘ fg.2))
+                 (cc : forall X Y Z, continuous (Mono _ (cm X Y Z))) :
+  mixin_of C.
+Proof.
+have cm' : forall X Y Z,
+             @monotone [poType of Cpo.Pack (cC Z Y) *
+                                  Cpo.Pack (cC Y X)]
+                       (Cpo.Pack (cC Z X))
+                       (fun fg => fg.2 ∘ fg.1).
+  move=> X Y Z [/= g1 f1] [/= g2 f2] [/= g12 f12].
+  by apply: (cm Z Y X (f1, g1) (f2, g2)); split.
+apply: (@Mixin _ cC cm cm' cc _).
+move=> X Y Z; move=> /= fg /=.
+move: (cc Z Y X (⟨'π2, 'π1⟩ ∘ fg))=> /=.
+rewrite !compA pairKL pairKR=> <-; apply: congr1; by apply/eq_mono.
+Qed.
 
 Record class_of (obj : Type1) (hom : obj -> obj -> Type0) := Class {
   base  : Cat.mixin_of@{u0 u1} hom;
-  mixin : mixin_of (@comp (Cat.Pack@{u0 u1} base))
+  mixin : mixin_of (Cat.Pack@{u0 u1} base)
 }.
 
-Record type := Pack {obj : Type1; hom : obj -> obj -> Type0; class : class_of hom}.
+Record type := Pack {obj; hom : obj -> obj -> Type0; class : class_of hom}.
 Local Coercion obj : type >-> Sortclass.
 Local Coercion hom : type >-> Funclass.
 Local Coercion base : class_of >-> Cat.mixin_of.
-Variables (C0 : Type@{u1}) (C1 : C0 -> C0 -> Type0) (cC : type).
+Variables (C0 : Type1) (C1 : C0 -> C0 -> Type0) (cC : type).
 Definition clone c of phant_id (class cC) c := @Pack C0 C1 c.
 
 Definition catType := @Cat.Pack _ _ (class cC).
@@ -3755,6 +3811,8 @@ Definition pack :=
   [find c : Cat.type | @Cat.hom c ~ C1 | "not a catType" ]
   [find b : Cat.mixin_of _ | Cat.class c ~ b ]
   fun m => @Pack C0 C1 (@Class _ _ b m).
+
+Unset Primitive Projections.
 
 End ClassDef.
 
@@ -3765,7 +3823,7 @@ Coercion base : class_of >-> Cat.mixin_of.
 Coercion catType : type >-> Cat.type.
 Canonical catType.
 Notation cpoCatType := type.
-Notation CpoCatMixin := Mixin.
+Notation CpoCatMixin := pack_mixin.
 Notation CpoCatType C0 C1 m := (@pack C0 C1 _ unify _ unify m).
 End Exports.
 
@@ -3773,19 +3831,44 @@ End CpoCat.
 
 Export CpoCat.Exports.
 
+(* Coq cannot handle the declaration of canonical instances with
+   primitive projections very well yet, so we have to add an alias to
+   CpoCat.hom to be able to declare the instances below. *)
+Definition cpo_hom := CpoCat.hom.
+
+Section CpoCatTheory.
+
+Variable C : cpoCatType.
+
+Canonical cpoCatHom_cpoType X Y :=
+  @Cpo.Pack (cpo_hom C X Y) (CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) X Y).
+Canonical cpoCatHom_poType X Y :=
+  PoType (cpo_hom C X Y) (Po.class (cpoCatHom_cpoType X Y)).
+Canonical cpoCatHom_choiceType X Y : choiceType :=
+  ChoiceType (cpo_hom C X Y) (Choice.class (cpoCatHom_cpoType X Y)).
+Canonical cpoCatHom_poChoiceType X Y := PoChoiceType (cpo_hom C X Y).
+
+Definition monotone_cpo_comp (X Y Z : C) :
+  monotone (fun fg : cpo_hom C Y Z * cpo_hom C X Y => fg.1 ∘ fg.2 : cpo_hom C _ _) :=
+  @CpoCat.comp_mono _ (CpoCat.mixin (CpoCat.class C)) X Y Z.
+
+Definition continuous_cpo_comp (X Y Z : C) :
+  continuous (Mono _ (@monotone_cpo_comp X Y Z)) :=
+  @CpoCat.comp_cont _ (CpoCat.mixin (CpoCat.class C)) X Y Z.
+
+End CpoCatTheory.
+
 Section CpoCpoCat.
 
 Definition cpo_cpoCatMixin :=
-  @CpoCatMixin _ _ cont_comp (fun T S => Cpo.class (cont_cpoType T S))
+  @CpoCatMixin cont_catType (fun T S => Cpo.class (cont_cpoType T S))
                monotone_cont_compp continuous_cont_compp.
 
 Canonical cpo_cpoCatType :=
   Eval hnf in CpoCatType cpoType cont cpo_cpoCatMixin.
 
 Definition pcpo_cpoCatMixin :=
-  @CpoCatMixin pcpoType (fun T S => cont T S)
-               (fun T S R f g => f ∘ g)
-               (fun T S => Cpo.class (cont_cpoType T S))
+  @CpoCatMixin pcpo_catType (fun T S => Cpo.class (cont_cpoType T S))
                monotone_cont_compp continuous_cont_compp.
 
 Canonical pcpo_cpoCatType :=
