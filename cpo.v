@@ -3876,6 +3876,24 @@ Canonical pcpo_cpoCatType :=
 
 End CpoCpoCat.
 
+Section OppositeCpoCat.
+
+Variable C : cpoCatType.
+
+Definition op_cpoCatMixin :=
+  @CpoCat.Mixin
+    (op_catType C)
+    (fun T S => CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) S T)
+    (@CpoCat.comp_mono' _ (CpoCat.mixin (CpoCat.class C)))
+    (@CpoCat.comp_mono  _ (CpoCat.mixin (CpoCat.class C)))
+    (@CpoCat.comp_cont' _ (CpoCat.mixin (CpoCat.class C)))
+    (@CpoCat.comp_cont  _ (CpoCat.mixin (CpoCat.class C))).
+
+Canonical op_cpoCatType :=
+  Eval hnf in CpoCatType (op_obj C) (op_hom C) op_cpoCatMixin.
+
+End OppositeCpoCat.
+
 Record lc_functor := LcFunctor {
   f_obj :> cpoType -> cpoType -> pcpoType;
   f_mor :  forall {T1 T2 S1 S2 : cpoType},
