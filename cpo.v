@@ -23,6 +23,8 @@ Unset Printing Implicit Defensive.
 
 - Use smart constructors for other subtypes.
 
+- Remove mapp
+
 *)
 
 Obligation Tactic := idtac.
@@ -2989,13 +2991,13 @@ Section ProdCpo.
 Variables T S : cpoType.
 
 Definition prod_sup (x : chain (T * S)) :=
-  (sup (mono_fst ∘ x), sup (mono_snd ∘ x)).
+  (sup ('π1 ∘ x), sup ('π2 ∘ x)).
 
 Lemma prod_supP (x : chain (T * S)) : supremum x (prod_sup x).
 Proof.
 rewrite /prod_sup.
-case: (supP (mono_fst ∘ x)) => [ub_x1 least_x1].
-case: (supP (mono_snd ∘ x)) => [ub_x2 least_x2].
+case: (supP ('π1 ∘ x)) => [ub_x1 least_x1].
+case: (supP ('π2 ∘ x)) => [ub_x2 least_x2].
 split.
   by move=> n; split=> /=; [apply: ub_x1|apply: ub_x2].
 case=> y1 y2 ub_y; split; [apply: least_x1|apply: least_x2];
@@ -3831,30 +3833,40 @@ End CpoCat.
 
 Export CpoCat.Exports.
 
-(* Coq cannot handle the declaration of canonical instances with
-   primitive projections very well yet, so we have to add an alias to
-   CpoCat.hom to be able to declare the instances below. *)
-Definition cpo_hom := CpoCat.hom.
-
 Section CpoCatTheory.
 
 Variable C : cpoCatType.
 
-Canonical cpoCatHom_cpoType X Y :=
-  @Cpo.Pack (cpo_hom C X Y) (CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) X Y).
-Canonical cpoCatHom_poType X Y :=
-  PoType (cpo_hom C X Y) (Po.class (cpoCatHom_cpoType X Y)).
-Canonical cpoCatHom_choiceType X Y : choiceType :=
-  ChoiceType (cpo_hom C X Y) (Choice.class (cpoCatHom_cpoType X Y)).
-Canonical cpoCatHom_poChoiceType X Y := PoChoiceType (cpo_hom C X Y).
+Implicit Types X Y Z W : C.
 
-Definition monotone_cpo_comp (X Y Z : C) :
-  monotone (fun fg : cpo_hom C Y Z * cpo_hom C X Y => fg.1 ∘ fg.2 : cpo_hom C _ _) :=
+Canonical cpoCatHom_poType X Y :=
+  PoType (C X Y) (CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) X Y).
+Canonical cpoCatHom_choiceType X Y : choiceType :=
+  ChoiceType (C X Y) (CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) X Y).
+Canonical cpoCatHom_poChoiceType X Y :=
+  Eval hnf in PoChoiceType (C X Y).
+Canonical cpoCatHom_cpoType X Y :=
+  Eval hnf in CpoType (C X Y) (Cpo.mixin (CpoCat.hom_base (CpoCat.mixin (CpoCat.class C)) X Y)).
+
+Definition monotone_cpo_comp X Y Z :
+  monotone (fun fg : C Y Z * C X Y => fg.1 ∘ fg.2 : C _ _) :=
   @CpoCat.comp_mono _ (CpoCat.mixin (CpoCat.class C)) X Y Z.
 
-Definition continuous_cpo_comp (X Y Z : C) :
+Definition continuous_cpo_comp X Y Z :
   continuous (Mono _ (@monotone_cpo_comp X Y Z)) :=
   @CpoCat.comp_cont _ (CpoCat.mixin (CpoCat.class C)) X Y Z.
+
+Lemma continuous_cpo_compL X Y Z (f : {mono nat -> C Y Z}) (g : C X Y) :
+  sup f ∘ g = sup (Mono _ (@monotone_cpo_comp X Y Z) ∘ ⟨f, mono_const _ g⟩).
+Proof.
+by case/continuous2P: (@continuous_cpo_comp X Y Z)=> [/(_ f g)].
+Qed.
+
+Lemma continuous_cpo_compR X Y Z (f : C Y Z) (g : {mono nat -> C X Y}) :
+  f ∘ sup g = sup (Mono _ (@monotone_cpo_comp X Y Z) ∘ ⟨mono_const _ f, g⟩).
+Proof.
+by case/continuous2P: (@continuous_cpo_comp X Y Z)=> [_ /(_ f g)].
+Qed.
 
 End CpoCatTheory.
 
@@ -3893,6 +3905,37 @@ Canonical op_cpoCatType :=
   Eval hnf in CpoCatType (op_obj C) (op_hom C) op_cpoCatMixin.
 
 End OppositeCpoCat.
+
+Section ProdCpoCat.
+
+Variables C D : cpoCatType.
+
+Program Definition prod_cat_cpoCatMixin :=
+  @CpoCatMixin
+    (prod_cat_catType C D)
+    (fun T S => Cpo.class [cpoType of C T.1 S.1 * D T.2 S.2])
+    _ _.
+
+Next Obligation.
+case=> /= [T1 T2] [S1 S2] [R1 R2].
+case=> [[/= f1 g1] [/= f2 g2]] [[/= h1 k1] [/= h2 k2]].
+case=> [[/= fh1 gk1] [/= fh2 gk2]]; split=> /=.
+- by apply: (@monotone_cpo_comp _ _ _ _ (f1, f2) (h1, h2)); split.
+- by apply: (@monotone_cpo_comp _ _ _ _ (g1, g2) (k1, k2)); split.
+Qed.
+
+Next Obligation.
+case=> /= [T1 T2] [S1 S2] [R1 R2]; apply/continuous2P; split=> /=.
+- move=> fg [/= h k]; congr pair=> /=;
+  by rewrite continuous_cpo_compL; congr sup; apply/eq_mono.
+- move=> [/= f g] hk; congr pair=> /=;
+  by rewrite continuous_cpo_compR; congr sup; apply/eq_mono.
+Qed.
+
+Canonical prod_cat_cpoCatType :=
+  Eval hnf in CpoCatType (C * D) (prod_cat_hom C D) prod_cat_cpoCatMixin.
+
+End ProdCpoCat.
 
 Record lc_functor := LcFunctor {
   f_obj :> cpoType -> cpoType -> pcpoType;
