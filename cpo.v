@@ -12,9 +12,6 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 (* TODO:
 
-- Test whether wrapping functions in a definition helps with canonical structure
-  inference.
-
 - Fix canonical structure inference for mono, cont and friends.
 
 - Better naming conventions for mono, cont, etc instances.
@@ -24,6 +21,10 @@ Unset Printing Implicit Defensive.
 - Use smart constructors for other subtypes.
 
 - Remove mapp
+
+- Make composition simplify when applied.
+
+- Name categories after objects instead of hom sets
 
 *)
 
@@ -347,14 +348,14 @@ Constraint i <= j.
 
 Variable C : catType@{i j}.
 
-Definition op_obj : Type@{j} := Cat.obj C.
+Definition op_obj (T : Type@{j}) : Type@{j} := T.
 Definition op_hom X Y : Type@{i} := C Y X.
 Definition op_comp X Y Z (f : op_hom Y Z) (g : op_hom X Y) : op_hom X Z :=
   comp@{i j} g f.
 Definition op_id X : op_hom X X := cat_id@{i j} X.
 
 Definition op_catMixin :=
-  @Cat.Mixin op_obj op_hom op_comp op_id
+  @Cat.Mixin (op_obj C) op_hom op_comp op_id
              (Cat.Axioms_
                 (fun X Y =>
                      @Cat.compf1 _ _ _ _ (Cat.compP (Cat.class C)) Y X)
@@ -368,9 +369,10 @@ Definition op_catMixin :=
                                W Z Y X f g h)).
 
 Canonical op_catType :=
-  CatType op_obj op_hom op_catMixin.
+  CatType (op_obj C) op_hom op_catMixin.
 
 (** Identities to help type checking *)
+Definition Op (T : Type@{j}) (x : T) : op_obj T := x.
 Definition of_op X Y (f : op_hom X Y) : C Y X := f.
 Definition to_op X Y (f : C X Y) : op_hom Y X := f.
 
@@ -1798,7 +1800,7 @@ Canonical mono_of_subType (T S : poType) :=
   Eval hnf in [subType of {mono T -> S}].
 
 Lemma monoP (T S : poType) (f : {mono T -> S}) : monotone f.
-Proof. exact: valP. Qed.
+Proof. case: f=> [? fP]; exact: fP. Defined.
 
 Lemma eq_mono (T S : poType) (f g : {mono T -> S}) : f =1 g <-> f = g.
 Proof.
@@ -1807,7 +1809,7 @@ by move=> e; apply: val_inj; apply: functional_extensionality.
 Qed.
 
 Definition mono_comp (T S R : poType) (f : {mono S -> R}) (g : {mono T -> S}) : {mono T -> R} :=
-  Eval hnf in Sub (f \o g) (monotone_comp (valP f) (valP g)).
+  Eval hnf in Sub (f \o g) (monotone_comp (monoP f) (monoP g)).
 
 Canonical mono_comp.
 
@@ -3936,6 +3938,53 @@ Canonical prod_cat_cpoCatType :=
   Eval hnf in CpoCatType (C * D) (prod_cat_hom C D) prod_cat_cpoCatMixin.
 
 End ProdCpoCat.
+
+Section CpoFunctor.
+
+Implicit Types C D E : cpoCatType.
+
+Record cpo_functor C D := CpoFunctor {
+  cpo_f_val :> {functor C -> D};
+  cpo_fmap_mono : forall X Y, monotone (@fmap _ _ cpo_f_val X Y);
+  cpo_fmap_cont : forall X Y, continuous (Mono _ (@cpo_fmap_mono X Y))
+}.
+
+Lemma cpo_f_val_inj C D : injective (@cpo_f_val C D).
+Proof.
+case=> [/= F Fmono Fcont] [/= G Gmono Gcont] e.
+move: Gmono Gcont; rewrite -{}e {G} => Gmono.
+rewrite -(proof_irrelevance _ Fmono Gmono) => Gcont.
+by rewrite -(proof_irrelevance _ Fcont Gcont).
+Qed.
+
+Definition cpo_functor_id C : cpo_functor C C :=
+  @CpoFunctor _ _ 1
+    (fun X Y => @monotone_id [poType of C X Y])
+    (fun X Y => @continuous_id [cpoType of C X Y]).
+
+Definition cpo_functor_comp C D E (F : cpo_functor D E) (G : cpo_functor C D) :
+  cpo_functor C E :=
+  @CpoFunctor _ _ (cpo_f_val F ∘ cpo_f_val G)
+    (fun X Y => monotone_comp (@cpo_fmap_mono _ _ F _ _) (@cpo_fmap_mono _ _ G X Y))
+    (fun X Y => continuous_comp (@cpo_fmap_cont _ _ F _ _) (@cpo_fmap_cont _ _ G X Y)).
+
+Lemma cpo_functor_compP : Cat.axioms cpo_functor_comp cpo_functor_id.
+Proof.
+by split=> *; apply: cpo_f_val_inj; rewrite /= ?comp1f ?compf1 ?compA.
+Qed.
+
+Definition cpo_functor_catMixin := CatMixin cpo_functor_compP.
+
+Canonical cpo_functor_catType :=
+  Eval hnf in CatType cpoCatType cpo_functor cpo_functor_catMixin.
+
+End CpoFunctor.
+
+Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
+  cpo_functor C D.
+
+Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
+  (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
 Record lc_functor := LcFunctor {
   f_obj :> cpoType -> cpoType -> pcpoType;
