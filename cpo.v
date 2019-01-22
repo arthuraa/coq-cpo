@@ -349,13 +349,14 @@ Constraint i <= j.
 Variable C : catType@{i j}.
 
 Definition op_obj (T : Type@{j}) : Type@{j} := T.
-Definition op_hom X Y : Type@{i} := C Y X.
-Definition op_comp X Y Z (f : op_hom Y Z) (g : op_hom X Y) : op_hom X Z :=
+Definition op_hom (T : Type@{j}) (hom : T -> T -> Type@{i}) X Y : Type@{i} :=
+  hom Y X.
+Definition op_comp X Y Z (f : op_hom C Y Z) (g : op_hom C X Y) : op_hom C X Z :=
   comp@{i j} g f.
-Definition op_id X : op_hom X X := cat_id@{i j} X.
+Definition op_id X : op_hom C X X := cat_id@{i j} X.
 
 Definition op_catMixin :=
-  @Cat.Mixin (op_obj C) op_hom op_comp op_id
+  @Cat.Mixin (op_obj C) (op_hom C) op_comp op_id
              (Cat.Axioms_
                 (fun X Y =>
                      @Cat.compf1 _ _ _ _ (Cat.compP (Cat.class C)) Y X)
@@ -369,14 +370,16 @@ Definition op_catMixin :=
                                W Z Y X f g h)).
 
 Canonical op_catType :=
-  CatType (op_obj C) op_hom op_catMixin.
+  CatType (op_obj C) (op_hom C) op_catMixin.
 
 (** Identities to help type checking *)
 Definition Op (T : Type@{j}) (x : T) : op_obj T := x.
-Definition of_op X Y (f : op_hom X Y) : C Y X := f.
-Definition to_op X Y (f : C X Y) : op_hom Y X := f.
-
-Lemma op_compE X Y Z (f : op_hom Y Z) (g : op_hom X Y) :
+Definition of_op (T : Type@{j}) (hom : T -> T -> Type@{i}) X Y :
+  op_hom hom X Y -> hom Y X :=
+  id.
+Definition to_op (T : Type@{j}) (hom : T -> T -> Type@{i}) X Y :
+  hom X Y -> op_hom hom Y X := id.
+Lemma op_compE X Y Z (f : op_hom C Y Z) (g : op_hom C X Y) :
   f ∘ g = of_op g ∘ of_op f.
 Proof. by []. Qed.
 
