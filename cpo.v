@@ -198,6 +198,11 @@ Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
 
 Arguments fst {_ _} _.
 Arguments snd {_ _} _.
+(* This declaration helps inferring a pair p when we know what p.1 and p.2
+   should be. This typically arises when p : Type * Type. *)
+Definition prod_pair@{i} (T S : Type@{i}) (x : T) (y : S) := (x, y).
+Canonical prod_pair.
+
 Definition pairf@{i} (T S R : Type@{i}) (f : R -> T) (g : R -> S) x :=
   (f x, g x).
 
@@ -348,7 +353,7 @@ Constraint i <= j.
 
 Variable C : catType@{i j}.
 
-Definition op_obj (T : Type@{j}) : Type@{j} := T.
+Definition op (T : Type@{j}) : Type@{j} := T.
 Definition op_hom (T : Type@{j}) (hom : T -> T -> Type@{i}) X Y : Type@{i} :=
   hom Y X.
 Definition op_comp X Y Z (f : op_hom C Y Z) (g : op_hom C X Y) : op_hom C X Z :=
@@ -356,7 +361,7 @@ Definition op_comp X Y Z (f : op_hom C Y Z) (g : op_hom C X Y) : op_hom C X Z :=
 Definition op_id X : op_hom C X X := cat_id@{i j} X.
 
 Definition op_catMixin :=
-  @Cat.Mixin (op_obj C) (op_hom C) op_comp op_id
+  @Cat.Mixin (op C) (op_hom C) op_comp op_id
              (Cat.Axioms_
                 (fun X Y =>
                      @Cat.compf1 _ _ _ _ (Cat.compP (Cat.class C)) Y X)
@@ -370,10 +375,10 @@ Definition op_catMixin :=
                                W Z Y X f g h)).
 
 Canonical op_catType :=
-  CatType (op_obj C) (op_hom C) op_catMixin.
+  CatType (op C) (op_hom C) op_catMixin.
 
 (** Identities to help type checking *)
-Definition Op (T : Type@{j}) (x : T) : op_obj T := x.
+Definition Op (T : Type@{j}) (x : T) : op T := x.
 Definition of_op (T : Type@{j}) (hom : T -> T -> Type@{i}) X Y :
   op_hom hom X Y -> hom Y X :=
   id.
@@ -3778,24 +3783,23 @@ Record mixin_of (C : catType@{u0 u1}) := Mixin {
   comp_cont' : forall X Y Z, continuous (Mono _ (@comp_mono' X Y Z))
 }.
 
-Lemma pack_mixin (C  : catType@{u0 u1})
+Program Definition pack_mixin (C  : catType@{u0 u1})
                  (cC : forall X Y, Cpo.class_of (C X Y))
                  (cm : forall X Y Z, @monotone [poType of Cpo.Pack (cC Y Z) *
                                                           Cpo.Pack (cC X Y)]
                                                (Cpo.Pack (cC X Z))
                                                (fun fg => fg.1 ∘ fg.2))
                  (cc : forall X Y Z, continuous (Mono _ (cm X Y Z))) :
-  mixin_of C.
-Proof.
-have cm' : forall X Y Z,
-             @monotone [poType of Cpo.Pack (cC Z Y) *
-                                  Cpo.Pack (cC Y X)]
-                       (Cpo.Pack (cC Z X))
-                       (fun fg => fg.2 ∘ fg.1).
-  move=> X Y Z [/= g1 f1] [/= g2 f2] [/= g12 f12].
-  by apply: (cm Z Y X (f1, g1) (f2, g2)); split.
-apply: (@Mixin _ cC cm cm' cc _).
-move=> X Y Z; move=> /= fg /=.
+  mixin_of C :=
+  @Mixin C cC cm _ cc _.
+
+Next Obligation.
+move=> C cC cm cc X Y Z [/= g1 f1] [/= g2 f2] [/= g12 f12].
+by apply: (cm Z Y X (f1, g1) (f2, g2)); split.
+Qed.
+
+Next Obligation.
+move=> C cC cm cc X Y Z; move=> /= fg /=.
 move: (cc Z Y X (⟨'π2, 'π1⟩ ∘ fg))=> /=.
 rewrite !compA pairKL pairKR=> <-; apply: congr1; by apply/eq_mono.
 Qed.
@@ -3891,6 +3895,10 @@ Definition pcpo_cpoCatMixin :=
 Canonical pcpo_cpoCatType :=
   Eval hnf in CpoCatType pcpoType (fun T S => cont T S) pcpo_cpoCatMixin.
 
+Lemma pcpo_compE (T S R : pcpoType) :
+  @comp pcpo_cpoCatType T S R = @comp cont_catType T S R.
+Proof. by []. Qed.
+
 End CpoCpoCat.
 
 Section OppositeCpoCat.
@@ -3907,7 +3915,7 @@ Definition op_cpoCatMixin :=
     (@CpoCat.comp_cont  _ (CpoCat.mixin (CpoCat.class C))).
 
 Canonical op_cpoCatType :=
-  Eval hnf in CpoCatType (op_obj C) (op_hom C) op_cpoCatMixin.
+  Eval hnf in CpoCatType (op C) (op_hom C) op_cpoCatMixin.
 
 End OppositeCpoCat.
 
@@ -3989,19 +3997,6 @@ Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
 Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
   (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
-Record lc_functor := LcFunctor {
-  f_obj :> cpoType -> cpoType -> pcpoType;
-  f_mor :  forall {T1 T2 S1 S2 : cpoType},
-             {cont {cont T2 -> T1} * {cont S1 -> S2} ->
-                   {cont f_obj T1 S1 -> f_obj T2 S2}};
-  f_mor1 : forall (T S : cpoType),
-             f_mor (@cat_id _ T, @cat_id _ S) = 1;
-  f_morD : forall (T1 T2 T3 S1 S2 S3 : cpoType)
-                  (f2 : {cont T3 -> T2}) (f1 : {cont T2 -> T1})
-                  (g1 : {cont S1 -> S2}) (g2 : {cont S2 -> S3}),
-             f_mor (f1 ∘ f2, g2 ∘ g1) = f_mor (f2, g2) ∘ f_mor (f1, g1)
-}.
-
 Section Void.
 
 Variant void : Set := .
@@ -4033,10 +4028,11 @@ End Void.
 
 Section RecType.
 
-Variable F : lc_functor.
+Variable F : {cpo_functor op cpoType * cpoType -> pcpoType}.
 
 Definition chain_obj n : pcpoType :=
-  iter n (fun T : pcpoType => F T T) [pcpoType of subsing void].
+  iter n (fun T : pcpoType => F (Pcpo.cpoType T, Pcpo.cpoType T))
+  [pcpoType of subsing void].
 
 Local Notation "'X_ n" := (chain_obj n)
   (at level 0, n at level 9, format "''X_' n").
@@ -4056,27 +4052,29 @@ Definition chain_mor0 : {retr 'X_1 -> 'X_0} :=
   Sub chain_mor0_def chain_mor0_proof.
 
 Lemma f_emb_proof (T S : cpoType) (f : {retr T -> S}) :
-  retraction (f_mor F (f^e, retr_retr f)) (f_mor F (retr_retr f, f^e)).
+  retraction (fmap F (f^e, retr_retr f)) (fmap F (retr_retr f, f^e)).
 Proof.
-split; rewrite -f_morD; first by rewrite (proj1 (retrP f)) f_mor1.
-rewrite -f_mor1; apply: (valP (val (f_mor F))); split;
-exact: (proj2 (retrP f)).
+split; rewrite -pcpo_compE -fmapD prod_cat_compE /=.
+  by rewrite op_compE /of_op (proj1 (retrP f)) fmap1.
+(* FIXME: SSR rewrite does not work here *)
+change 1 with (@cat_id pcpo_cpoCatType (F (T, T))).
+rewrite -fmap1; apply: (cpo_fmap_mono F); split; exact: (proj2 (retrP f)).
 Qed.
 
-Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F T T -> F S S} :=
-  Sub (f_mor F (f^e, retr_retr f), f_mor F (retr_retr f, f^e))
+Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F (Op T, T) -> F (Op S, S)} :=
+  Sub (fmap F (f^e, retr_retr f), fmap F (retr_retr f, f^e))
       (@f_emb_proof T S f).
 
-Lemma f_emb1 (T : cpoType) : f_emb 1 = 1 :> {retr F T T -> F T T}.
+Lemma f_emb1 (T : cpoType) : f_emb 1 = 1 :> {retr F (Op T, T) -> F (Op T, T)}.
 Proof.
-by apply/eq_retr=> x; rewrite /f_emb /= /retr_retr /= f_mor1.
+by apply/eq_retr=> x; rewrite /f_emb /= /retr_retr /= fmap1.
 Qed.
 
 Lemma f_embD (T S R : cpoType) (f : {retr S -> R}) (g : {retr T -> S}) :
   f_emb (f ∘ g) = f_emb f ∘ f_emb g.
 Proof.
 apply: retr_retr_inj; unfold comp, f_emb, retr_retr; simpl.
-by rewrite f_morD.
+by rewrite fmapD.
 Qed.
 
 Fixpoint chain_mor n : {retr 'X_n.+1 -> 'X_n} :=
@@ -4092,8 +4090,8 @@ Lemma chain_mor_outlim n :
   retr_outlim chain_mor n.
 Proof. by case: n=> [|n] /=; rewrite [RHS]retr_outlimS. Qed.
 
-Definition f_proj n : {retr F mu mu -> 'X_n} :=
-  match n return {retr F mu mu -> 'X_n} with
+Definition f_proj n : {retr F (Op mu, mu) -> 'X_n} :=
+  match n return {retr F (Op mu, mu) -> 'X_n} with
   | 0    => chain_mor 0 ∘ f_emb (retr_outlim chain_mor 0)
   | n.+1 => f_emb (retr_outlim chain_mor n)
   end.
@@ -4128,7 +4126,7 @@ by case: n=> [|n] //=; rewrite -f_embD chain_mor_outlim.
 Qed.
 
 (* FIXME: This does not work with Sub *)
-Definition roll (x : F mu mu) : mu :=
+Definition roll (x : F (Op mu, mu)) : mu :=
   @InvLim _ _ (f_proj^~ x) (fun n => roll_proof n x).
 
 Lemma monotone_roll : monotone roll.
@@ -4136,7 +4134,7 @@ Proof.
 move=> x y xy; move=> n /=; exact: (monoP (f_proj n) xy).
 Qed.
 
-Definition mono_roll : {mono F mu mu -> mu} :=
+Definition mono_roll : {mono F (Op mu, mu) -> mu} :=
   Sub roll monotone_roll.
 
 Lemma continuous_roll : continuous mono_roll.
@@ -4145,7 +4143,7 @@ move=> x; apply: val_inj; apply: functional_extensionality_dep=> n /=.
 rewrite {1}/sup /= -(contP (f_proj n)); congr sup; exact: val_inj.
 Qed.
 
-Definition cont_roll : {cont F mu mu -> mu} :=
+Definition cont_roll : {cont F (Op mu, mu) -> mu} :=
   Sub mono_roll continuous_roll.
 
 Lemma unroll_proof :
@@ -4157,7 +4155,7 @@ apply: monotone_cont_comp; first reflexivity.
 move=> x; exact: downlE_outlim.
 Qed.
 
-Definition unroll : {cont mu -> F mu mu} := sup (Mono _ unroll_proof).
+Definition unroll : {cont mu -> F (Op mu, mu)} := sup (Mono _ unroll_proof).
 
 Lemma unrollK : cont_roll ∘ unroll = 1.
 Proof.
@@ -4174,10 +4172,15 @@ Qed.
 
 Lemma rollK : unroll ∘ cont_roll = 1.
 Proof.
-rewrite /unroll continuous_cont_compL /= -[RHS]f_mor1 /= -sup_proj.
-rewrite -sup_pairf -contP -(sup_shift _ 1); congr sup; apply/eq_mono=> /= n /=.
+rewrite /unroll continuous_cont_compL /= -[RHS](fmap1 F) /=.
+change 1 with (cat_id mu, cat_id mu); rewrite -sup_proj.
+rewrite -sup_pairf.
+change (fmap F (sup (mono_pairf (mono_proj chain_mor) (mono_proj chain_mor))))
+  with (Mono _ (@cpo_fmap_mono _ _ F (Op mu, mu) (Op mu, mu))
+             (sup (mono_pairf (mono_proj chain_mor) (mono_proj chain_mor)))).
+rewrite -cpo_fmap_cont -(sup_shift _ 1); congr sup; apply/eq_mono=> /= n /=.
 apply/eq_cont=> x /=; rewrite /outlim; unfold pairf; simpl.
-by rewrite /f_emb /= /proj f_morD.
+by rewrite /f_emb /= /proj fmapD.
 Qed.
 
 End RecType.
