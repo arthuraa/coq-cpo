@@ -3997,6 +3997,31 @@ Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
 Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
   (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
+Section CpoCatTermCat.
+
+Definition cpoCat_term_cpoCatMixin :=
+  @CpoCatMixin
+    cat_term
+    (fun _ _ => Cpo.class [cpoType of unit])
+    (fun _ _ _ _ _ _ => I)
+    (fun _ _ _ _ => erefl).
+
+Canonical cpoCat_term :=
+  CpoCatType (indisc_obj unit) (@indisc_hom unit) cpoCat_term_cpoCatMixin.
+
+Definition cpoCat_bang (C : cpoCatType) : {cpo_functor C -> indisc_obj unit} :=
+  @CpoFunctor _ _ '! (fun _ _ _ _ _ => I) (fun _ _ _ => erefl).
+
+Lemma cpoCat_bangP (C : cpoCatType) (F : {cpo_functor C -> indisc_obj unit}) :
+  F = cpoCat_bang _.
+Proof. exact/cpo_f_val_inj/bangP. Qed.
+
+Definition cpoCat_termCatMixin := TermCatMixin cpoCat_bangP.
+Canonical cpoCat_termCatType :=
+  Eval hnf in TermCatType cpoCatType cpo_functor cpoCat_termCatMixin.
+
+End CpoCatTermCat.
+
 Section CpoCatProdCat.
 
 Definition cpoCat_proj1 (C D : cpoCatType) : {cpo_functor C * D -> C} :=
@@ -4034,6 +4059,9 @@ Canonical cpoCat_prodCatType :=
   Eval hnf in ProdCatType cpoCatType cpo_functor cpoCat_prodCatMixin.
 
 End CpoCatProdCat.
+
+Canonical cpoCat_cartCatType :=
+  Eval hnf in CartCatType cpoCatType cpo_functor.
 
 Section Void.
 
