@@ -3997,6 +3997,44 @@ Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
 Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
   (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
+Section CpoCatProdCat.
+
+Definition cpoCat_proj1 (C D : cpoCatType) : {cpo_functor C * D -> C} :=
+  @CpoFunctor _ _ 'π1 (fun X Y => @monotone_fst _ _) (fun X Y => @continuous_fst _ _).
+
+Definition cpoCat_proj2 (C D : cpoCatType) : {cpo_functor C * D -> D} :=
+  @CpoFunctor _ _ 'π2 (fun X Y => @monotone_snd _ _) (fun X Y => @continuous_snd _ _).
+
+Definition cpoCat_pair
+           (C D E : cpoCatType)
+           (F : {cpo_functor E -> C})
+           (G : {cpo_functor E -> D}) : {cpo_functor E -> C * D} :=
+  @CpoFunctor _ _ ⟨cpo_f_val F, cpo_f_val G⟩
+              (fun X Y => @monotone_pairf
+                            _ _ _
+                            (Mono _ (@cpo_fmap_mono _ _ F _ _))
+                            (Mono _ (@cpo_fmap_mono _ _ G _ _)))
+              (fun X Y => @continuous_pairf
+                            _ _ _
+                            (Cont _ (@cpo_fmap_cont _ _ F _ _))
+                            (Cont _ (@cpo_fmap_cont _ _ G _ _))).
+
+Lemma cpoCat_pairP : ProdCat.axioms_of cpoCat_pair cpoCat_proj1 cpoCat_proj2.
+Proof.
+split.
+- move=> /= C D E F G; apply/cpo_f_val_inj=> /=; exact: pairKL.
+- move=> /= C D E F G; apply/cpo_f_val_inj=> /=; exact: pairKR.
+- move=> /= C D E F G.
+  case=> /(congr1 (@cpo_f_val _ _))/= H1 /(congr1 (@cpo_f_val _ _))/= H2.
+  by apply/cpo_f_val_inj/pairP; split.
+Qed.
+
+Definition cpoCat_prodCatMixin := ProdCatMixin cpoCat_pairP.
+Canonical cpoCat_prodCatType :=
+  Eval hnf in ProdCatType cpoCatType cpo_functor cpoCat_prodCatMixin.
+
+End CpoCatProdCat.
+
 Section Void.
 
 Variant void : Set := .
