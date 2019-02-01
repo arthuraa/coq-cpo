@@ -462,6 +462,9 @@ Canonical indisc_catType : catType@{Set i} :=
 
 End IndiscCat.
 
+Canonical unit_catType : catType@{Set Set} :=
+  CatType unit (@indisc_hom@{Set} unit) (indisc_catMixin@{Set} unit).
+
 Section FunCat.
 
 Universe i j.
@@ -717,7 +720,7 @@ Universe i j k.
 Constraint i <= j.
 Constraint j < k.
 
-Definition cat_term : catType@{i j} := indisc_catType@{i} unit.
+Definition cat_term : catType@{i j} := unit_catType.
 Definition cat_bang (C : catType@{i j}) : {functor C -> cat_term} :=
   @Functor _ cat_term (fun _ => tt) (fun _ _ _ => tt)
            (fun _ => erefl) (fun _ _ _ _ _ => erefl).
@@ -4047,12 +4050,12 @@ Definition cpoCat_term_cpoCatMixin :=
     (fun _ _ _ _ => erefl).
 
 Canonical cpoCat_term :=
-  CpoCatType (indisc_obj unit) (@indisc_hom unit) cpoCat_term_cpoCatMixin.
+  CpoCatType unit (@indisc_hom unit) cpoCat_term_cpoCatMixin.
 
-Definition cpoCat_bang (C : cpoCatType) : {cpo_functor C -> indisc_obj unit} :=
+Definition cpoCat_bang (C : cpoCatType) : {cpo_functor C -> unit} :=
   CpoFunctor '! (fun _ _ _ _ _ => I) (fun _ _ _ => erefl).
 
-Lemma cpoCat_bangP (C : cpoCatType) (F : {cpo_functor C -> indisc_obj unit}) :
+Lemma cpoCat_bangP (C : cpoCatType) (F : {cpo_functor C -> unit}) :
   F = cpoCat_bang _.
 Proof. exact/cpo_f_val_inj/bangP. Qed.
 
@@ -4102,6 +4105,23 @@ End CpoCatProdCat.
 
 Canonical cpoCat_cartCatType :=
   Eval hnf in CartCatType cpoCatType cpo_functor.
+
+Definition cpoCat_consts (C : cpoCatType) := CpoCat.obj C.
+
+Program Definition cpoCat_of_consts (C : cpoCatType) (X : cpoCat_consts C) :
+  {cpo_functor unit -> C} :=
+  CpoFunctor (@of_const _ (CpoCat.catType C) X)
+             (fun _ _ _ _ _ => appr_refl _) _.
+
+Next Obligation.
+move=> /= C X [] []; move=> /= x; apply: (etrans _ (sup_const _)).
+by congr sup; apply/eq_mono.
+Qed.
+
+Definition cpoCat_constCatMixin := ConstCatMixin cpoCat_of_consts.
+
+Canonical cpoCat_constCatType :=
+  Eval hnf in ConstCatType cpoCatType cpo_functor cpoCat_constCatMixin.
 
 Program Definition subsing_cpo_functor : {cpo_functor cpoType -> pcpoType} :=
   CpoFunctor subsing_functor _ _.
