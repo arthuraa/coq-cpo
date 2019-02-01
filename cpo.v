@@ -477,8 +477,8 @@ Definition sfun_catMixin :=
 
 Canonical Sets := CatType Type@{i} sfun@{i} sfun_catMixin.
 
-Lemma fun_compE (T S R : Type@{i}) (f : sfun S R) (g : sfun T S) (x : T) :
-  (f ∘ g) x = f (g x).
+Lemma fun_compE (T S R : Type@{i}) (f : sfun S R) (g : sfun T S) :
+  f ∘ g = f \o g.
 Proof. by []. Qed.
 
 End FunCat.
@@ -953,7 +953,7 @@ Lemma hom_fmapD (X Y Z : prod@{j} C^op C)
   (f : prod_cat_catType@{i j} C^op C Y Z) (g : hom _ X Y) :
   hom_fmap (comp@{i j} f g) = comp@{i j} (hom_fmap f) (hom_fmap g).
 Proof.
-apply/functional_extensionality=> x; rewrite /hom_fmap /= !fun_compE.
+apply/functional_extensionality=> x; rewrite /hom_fmap /= !fun_compE /=.
 by rewrite op_compE !compA.
 Qed.
 
@@ -1708,6 +1708,28 @@ Definition liftss f x : subsing S :=
 Definition mapss (f : T -> S) := liftss (subsing_of \o f).
 
 End SingletonMap.
+
+Lemma liftss1 T : @liftss T T subsing_of = id.
+Proof.
+apply/functional_extensionality=> X.
+apply/eq_subsing=> x; split; first by case=> y Xy <-.
+by move=> ?; exists x.
+Qed.
+
+Lemma liftss_comp T S R (f : S -> subsing R) (g : T -> subsing S) :
+  liftss f \o liftss g = liftss (liftss f \o g).
+Proof.
+apply/functional_extensionality=> X; apply/eq_subsing=> z; split.
+- by case=> y [x Xx gx] fy; exists x=> //; exists y.
+- by case=> x Xx [y gx fy]; exists y=> //; exists x.
+Qed.
+
+Lemma liftss_comp1 T S (f : T -> subsing S) : liftss f \o subsing_of = f.
+Proof.
+apply/functional_extensionality=> /= x.
+apply/eq_subsing=> y; split; first by case => _ <-.
+by move=> ?; exists x.
+Qed.
 
 Module Po.
 
@@ -3369,6 +3391,22 @@ Definition cont2_liftss (T S : cpoType) :
 Canonical cont2_liftss.
 Arguments cont2_liftss {_ _}.
 
+Program Definition subsing_functor : {functor cpoType -> pcpoType} :=
+  Functor subsing_pcpoType
+          (fun T S f => cont_liftss (cont_subsing_of ∘ f))
+          _ _.
+
+Next Obligation.
+move=> T /=; rewrite compf1; do 2![apply/val_inj]=> /=.
+by rewrite liftss1.
+Qed.
+
+Next Obligation.
+move=> T S R f g /=; do 2![apply/val_inj]=> /=.
+rewrite liftss_comp -!fun_compE [in LHS]compA [in RHS]compA !fun_compE.
+by rewrite liftss_comp1.
+Qed.
+
 Section InverseLimit.
 
 Variable T : nat -> cpoType.
@@ -3997,6 +4035,8 @@ Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
 Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
   (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
+Arguments CpoFunctor {_ _} _ _ _.
+
 Section CpoCatTermCat.
 
 Definition cpoCat_term_cpoCatMixin :=
@@ -4010,7 +4050,7 @@ Canonical cpoCat_term :=
   CpoCatType (indisc_obj unit) (@indisc_hom unit) cpoCat_term_cpoCatMixin.
 
 Definition cpoCat_bang (C : cpoCatType) : {cpo_functor C -> indisc_obj unit} :=
-  @CpoFunctor _ _ '! (fun _ _ _ _ _ => I) (fun _ _ _ => erefl).
+  CpoFunctor '! (fun _ _ _ _ _ => I) (fun _ _ _ => erefl).
 
 Lemma cpoCat_bangP (C : cpoCatType) (F : {cpo_functor C -> indisc_obj unit}) :
   F = cpoCat_bang _.
@@ -4025,24 +4065,24 @@ End CpoCatTermCat.
 Section CpoCatProdCat.
 
 Definition cpoCat_proj1 (C D : cpoCatType) : {cpo_functor C * D -> C} :=
-  @CpoFunctor _ _ 'π1 (fun X Y => @monotone_fst _ _) (fun X Y => @continuous_fst _ _).
+  CpoFunctor 'π1 (fun X Y => @monotone_fst _ _) (fun X Y => @continuous_fst _ _).
 
 Definition cpoCat_proj2 (C D : cpoCatType) : {cpo_functor C * D -> D} :=
-  @CpoFunctor _ _ 'π2 (fun X Y => @monotone_snd _ _) (fun X Y => @continuous_snd _ _).
+  CpoFunctor 'π2 (fun X Y => @monotone_snd _ _) (fun X Y => @continuous_snd _ _).
 
 Definition cpoCat_pair
            (C D E : cpoCatType)
            (F : {cpo_functor E -> C})
            (G : {cpo_functor E -> D}) : {cpo_functor E -> C * D} :=
-  @CpoFunctor _ _ ⟨cpo_f_val F, cpo_f_val G⟩
-              (fun X Y => @monotone_pairf
-                            _ _ _
-                            (Mono _ (@cpo_fmap_mono _ _ F _ _))
-                            (Mono _ (@cpo_fmap_mono _ _ G _ _)))
-              (fun X Y => @continuous_pairf
-                            _ _ _
-                            (Cont _ (@cpo_fmap_cont _ _ F _ _))
-                            (Cont _ (@cpo_fmap_cont _ _ G _ _))).
+  CpoFunctor ⟨cpo_f_val F, cpo_f_val G⟩
+             (fun X Y => @monotone_pairf
+                           _ _ _
+                           (Mono _ (@cpo_fmap_mono _ _ F _ _))
+                           (Mono _ (@cpo_fmap_mono _ _ G _ _)))
+             (fun X Y => @continuous_pairf
+                           _ _ _
+                           (Cont _ (@cpo_fmap_cont _ _ F _ _))
+                           (Cont _ (@cpo_fmap_cont _ _ G _ _))).
 
 Lemma cpoCat_pairP : ProdCat.axioms_of cpoCat_pair cpoCat_proj1 cpoCat_proj2.
 Proof.
@@ -4062,6 +4102,20 @@ End CpoCatProdCat.
 
 Canonical cpoCat_cartCatType :=
   Eval hnf in CartCatType cpoCatType cpo_functor.
+
+Program Definition subsing_cpo_functor : {cpo_functor cpoType -> pcpoType} :=
+  CpoFunctor subsing_functor _ _.
+
+Next Obligation.
+move=> /= T S; move=> /= f g fg; apply: monoP.
+by apply: monotone_cpo_comp; split=> //; reflexivity.
+Qed.
+
+Next Obligation.
+move=> /= T S; move=> /= x.
+rewrite continuous_cont_compR -contP; congr sup.
+by apply/eq_mono.
+Qed.
 
 Section Void.
 
