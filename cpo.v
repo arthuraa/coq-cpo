@@ -3444,6 +3444,8 @@ Canonical invlim_cpoType := Eval hnf in CpoType invlim invlim_cpoMixin.
 
 End InverseLimit.
 
+Arguments InvLim {_ _} _ _.
+
 Section Retractions.
 
 Definition retraction (T S : cpoType) (p : {cont T -> S}) (e : {cont S -> T}) :=
@@ -3668,7 +3670,7 @@ case: (leqP n m)=> [nm|mn].
 Qed.
 
 Definition inlim n x : invlim p :=
-  Sub (@inlim_def n x) (@inlim_proof n x).
+  InvLim (@inlim_def n x) (@inlim_proof n x).
 
 Lemma monotone_inlim n : monotone (@inlim n).
 Proof.
@@ -3801,6 +3803,27 @@ by rewrite (inlim_defER _ (leqnn n)) downl0.
 Qed.
 
 End BiLimit.
+
+Section BiLimitPointed.
+
+Variables (T : nat -> pcpoType) (p : forall n, {retr T n.+1 -> T n}).
+
+Program Definition invlim_bot : invlim p :=
+  InvLim (fun _ => ⊥) _.
+
+Next Obligation.
+move=> n /=; apply: appr_anti; first exact: botP.
+rewrite -(embK (p n) ⊥); apply: monoP; exact: botP.
+Qed.
+
+Lemma invlim_botP x : invlim_bot ⊑ x.
+Proof. move=> y; exact: botP. Qed.
+
+Definition invlim_ppoMixin := PpoMixin invlim_botP.
+Canonical invlim_ppoType := Eval hnf in PpoType (invlim p) invlim_ppoMixin.
+Canonical invlim_pcpoType := Eval hnf in PcpoType (invlim p).
+
+End BiLimitPointed.
 
 Module CpoCat.
 
@@ -4168,11 +4191,10 @@ End Void.
 
 Section RecType.
 
-Variable F : {cpo_functor op cpoType * cpoType -> pcpoType}.
+Variable F : {cpo_functor op pcpoType * pcpoType -> pcpoType}.
 
 Definition chain_obj n : pcpoType :=
-  iter n (fun T : pcpoType => F (Pcpo.cpoType T, Pcpo.cpoType T))
-  [pcpoType of subsing void].
+  iter n (fun T : pcpoType => F (T, T)) [pcpoType of subsing void].
 
 Local Notation "'X_ n" := (chain_obj n)
   (at level 0, n at level 9, format "''X_' n").
@@ -4191,26 +4213,26 @@ Qed.
 Definition chain_mor0 : {retr 'X_1 -> 'X_0} :=
   Sub chain_mor0_def chain_mor0_proof.
 
-Lemma f_emb_proof (T S : cpoType) (f : {retr T -> S}) :
+Lemma f_emb_proof (T S : pcpoType) (f : {retr T -> S}) :
   retraction (fmap F (f^e, retr_retr f)) (fmap F (retr_retr f, f^e)).
 Proof.
 split; rewrite -pcpo_compE -fmapD prod_cat_compE /=.
-  by rewrite op_compE /of_op (proj1 (retrP f)) fmap1.
+  by rewrite op_compE /of_op pcpo_compE (proj1 (retrP f)) fmap1.
 (* FIXME: SSR rewrite does not work here *)
 change 1 with (@cat_id pcpo_cpoCatType (F (T, T))).
 rewrite -fmap1; apply: (cpo_fmap_mono F); split; exact: (proj2 (retrP f)).
 Qed.
 
-Definition f_emb (T S : cpoType) (f : {retr T -> S}) : {retr F (Op T, T) -> F (Op S, S)} :=
+Definition f_emb (T S : pcpoType) (f : {retr T -> S}) : {retr F (Op T, T) -> F (Op S, S)} :=
   Sub (fmap F (f^e, retr_retr f), fmap F (retr_retr f, f^e))
       (@f_emb_proof T S f).
 
-Lemma f_emb1 (T : cpoType) : f_emb 1 = 1 :> {retr F (Op T, T) -> F (Op T, T)}.
+Lemma f_emb1 (T : pcpoType) : f_emb 1 = 1 :> {retr F (Op T, T) -> F (Op T, T)}.
 Proof.
 by apply/eq_retr=> x; rewrite /f_emb /= /retr_retr /= fmap1.
 Qed.
 
-Lemma f_embD (T S R : cpoType) (f : {retr S -> R}) (g : {retr T -> S}) :
+Lemma f_embD (T S R : pcpoType) (f : {retr S -> R}) (g : {retr T -> S}) :
   f_emb (f ∘ g) = f_emb f ∘ f_emb g.
 Proof.
 apply: retr_retr_inj; unfold comp, f_emb, retr_retr; simpl.
@@ -4223,7 +4245,7 @@ Fixpoint chain_mor n : {retr 'X_n.+1 -> 'X_n} :=
   | n.+1 => f_emb (chain_mor n)
   end.
 
-Definition mu := [cpoType of invlim chain_mor].
+Definition mu := [pcpoType of invlim chain_mor].
 
 Lemma chain_mor_outlim n :
   chain_mor n ∘ retr_outlim chain_mor n.+1 =
@@ -4313,7 +4335,7 @@ Qed.
 Lemma rollK : unroll ∘ cont_roll = 1.
 Proof.
 rewrite /unroll continuous_cont_compL /= -[RHS](fmap1 F) /=.
-change 1 with (cat_id mu, cat_id mu); rewrite -sup_proj.
+change 1 with (cat_id (Pcpo.cpoType mu), cat_id (Pcpo.cpoType mu)); rewrite -sup_proj.
 rewrite -sup_pairf.
 change (fmap F (sup (mono_pairf (mono_proj chain_mor) (mono_proj chain_mor))))
   with (Mono _ (@cpo_fmap_mono _ _ F (Op mu, mu) (Op mu, mu))
