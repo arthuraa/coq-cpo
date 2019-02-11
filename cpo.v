@@ -574,6 +574,13 @@ Notation "{ 'functor' T }" := (functor_of _ _ (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 Arguments NatTrans {_ _ _ _} _ _.
 
+Definition op_functor (C D : catType) (F : {functor C -> D}) :
+  {functor op C -> op D} :=
+  Functor (fun (X : op C) => Op (F X))
+          (fun (X Y : C) (f : C Y X) => fmap F f)
+          (fun _ => fmap1 F _)
+          (fun _ _ _ _ _ => fmapD F _ _).
+
 Section CatCat.
 
 Universe i j k.
@@ -4105,6 +4112,12 @@ Definition cpo_of_pcpo_cpo_functor : {cpo_functor pcpoType -> cpoType} :=
              (fun _ _ => @monotone_id _)
              (fun _ _ => @continuous_id _).
 
+Definition op_cpo_functor (C D : cpoCatType) (F : {cpo_functor C -> D})
+  : {cpo_functor op C -> op D} :=
+  CpoFunctor (op_functor F)
+             (fun _ _ => @cpo_fmap_mono _ _ F _ _)
+             (fun _ _ => @cpo_fmap_cont _ _ F _ _).
+
 (* TODO: These proof obligations might be discharged by showing that products
    and exponentials can be enriched in any CCC (cf. icomp above). *)
 
@@ -4371,3 +4384,20 @@ Definition disc_cpoMixin := CpoMixin disc_supP.
 Canonical disc_cpoType := Eval hnf in CpoType disc disc_cpoMixin.
 
 End Disc.
+
+Definition univ_def : {cpo_functor op pcpoType * pcpoType -> pcpoType} :=
+  pcont_cpo_functor ∘ ⟨op_cpo_functor cpo_of_pcpo_cpo_functor ∘ 'π1,
+                       subsing_cpo_functor ∘
+                         prod_cpo_functor ∘
+                           ⟨const (prod_cat_cpoCatType _ _) (disc_cpoType nat),
+                            cpo_of_pcpo_cpo_functor ∘ 'π2⟩⟩.
+
+Definition univ : pcpoType := mu univ_def.
+
+Notation "'U" := univ.
+
+Definition univ_roll : {cont {cont 'U -> subsing (disc nat * 'U)} -> 'U} :=
+  cont_roll univ_def.
+
+Definition univ_unroll : {cont 'U -> {cont 'U -> subsing (disc nat * 'U)}} :=
+  unroll univ_def.
