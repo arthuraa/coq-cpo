@@ -1167,6 +1167,9 @@ Qed.
 Definition exp_functor : {functor C^op * C -> C} :=
   Functor exp_fobj exp_fmap exp_fmap1 exp_fmapD.
 
+Definition icomp X Y Z : C ((Y ⇒ Z) × (X ⇒ Y)) (X ⇒ Z) :=
+  λ (eval ∘ ⟨'π1 ∘ 'π1, eval ∘ ⟨'π2 ∘ 'π1, 'π2⟩⟩).
+
 End CCCatTheory.
 
 Local Notation "X ⇒ Y" := (exp X Y)
@@ -3195,73 +3198,6 @@ Definition cont_compp (T S R : cpoType) :
 Canonical cont_compp.
 Arguments cont_compp {_ _ _}.
 
-Definition mapp (T1 S1 T2 S2 : Type) (f1 : T1 -> S1) (f2 : T2 -> S2) :=
-  fun x : T1 * T2 => (f1 x.1, f2 x.2).
-
-Lemma monotone_mapp (T1 S1 T2 S2 : poType) (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) :
-  monotone (mapp f1 f2).
-Proof.
-by case=> [x1 y1] [x2 y2] [/= x12 y12]; split;
-[apply: (valP f1 _ _ x12)|apply: (valP f2 _ _ y12)].
-Qed.
-
-Definition mono_mapp (T1 S1 T2 S2 : poType)
-  (f1 : {mono T1 -> S1}) (f2 : {mono T2 -> S2}) : {mono _ -> _} :=
-  Eval hnf in Sub (mapp f1 f2) (monotone_mapp f1 f2).
-Canonical mono_mapp.
-
-Lemma continuous_mapp (T1 S1 T2 S2 : cpoType)
-  (f1 : {cont T1 -> S1}) (f2 : {cont T2 -> S2}) :
-  continuous (mono_mapp f1 f2).
-Proof.
-move=> /= x; rewrite /mapp -2!contP {1}/sup /= /prod_sup.
-congr (sup _, sup _); exact/eq_mono.
-Qed.
-
-Definition cont_mapp (T1 S1 T2 S2 : cpoType)
-  (f1 : {cont T1 -> S1}) (f2 : {cont T2 -> S2}) :
-  {cont T1 * T2 -> S1 * S2} :=
-  Sub (mono_mapp f1 f2) (continuous_mapp f1 f2).
-Canonical cont_mapp.
-
-Definition cont2_mapp_def (T1 S1 T2 S2 : cpoType)
-  (f : {cont T1 -> S1} * {cont T2 -> S2}) :
-  {cont T1 * T2 -> S1 * S2} :=
-  cont_mapp f.1 f.2.
-
-Lemma monotone_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
-  monotone (@cont2_mapp_def T1 S1 T2 S2).
-Proof.
-move=> /= [f1 g1] [f2 g2] [/= f12 g12] [x1 y1] /=; rewrite /mapp /=.
-split; [exact: f12|exact: g12].
-Qed.
-
-Definition mono_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
-  {mono {cont T1 -> S1} * {cont T2 -> S2} ->
-        {cont T1 * T2 -> S1 * S2}} :=
-  Sub (@cont2_mapp_def T1 S1 T2 S2) (@monotone_cont2_mapp_def T1 S1 T2 S2).
-Canonical mono_cont2_mapp_def.
-
-Lemma continuous_cont2_mapp_def (T1 S1 T2 S2 : cpoType) :
-  continuous (@mono_cont2_mapp_def T1 S1 T2 S2).
-Proof.
-apply/continuous2P; split.
-- move=> /= f g; apply/eq_cont=> /= p.
-  congr (sup _, _); first by apply/eq_mono.
-  by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
-- move=> /= f g; apply/eq_cont=> /= p.
-  congr (_, sup _); last by apply/eq_mono.
-  by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
-Qed.
-
-Definition cont2_mapp (T1 S1 T2 S2 : cpoType) :
-  {cont {cont T1 -> S1} * {cont T2 -> S2} ->
-        {cont T1 * T2 -> S1 * S2}} :=
-  Sub (@mono_cont2_mapp_def T1 S1 T2 S2)
-      (@continuous_cont2_mapp_def T1 S1 T2 S2).
-Canonical cont2_mapp.
-Arguments cont2_mapp {_ _ _ _}.
-
 Section SubsingCpo.
 
 Variables (T : cpoType).
@@ -4158,6 +4094,68 @@ Next Obligation.
 move=> /= T S; move=> /= x.
 rewrite continuous_cont_compR -contP; congr sup.
 by apply/eq_mono.
+Qed.
+
+Definition cpo_of_pcpo_functor : {functor pcpoType -> cpoType} :=
+  Functor Pcpo.cpoType (fun _ _ f => f)
+          (fun _ => erefl) (fun _ _ _ _ _ => erefl).
+
+Definition cpo_of_pcpo_cpo_functor : {cpo_functor pcpoType -> cpoType} :=
+  CpoFunctor cpo_of_pcpo_functor
+             (fun _ _ => @monotone_id _)
+             (fun _ _ => @continuous_id _).
+
+(* TODO: These proof obligations might be discharged by showing that products
+   and exponentials can be enriched in any CCC (cf. icomp above). *)
+
+Program Definition prod_cpo_functor : {cpo_functor cpoType * cpoType -> cpoType} :=
+  CpoFunctor (prod_functor _) _ _.
+
+Next Obligation.
+move=> [/= T1 T2] [/= S1 S2].
+by move=> [/= f1 f2] [/= g1 g2] [/= fg1 fg2]; split=> /=; eauto.
+Qed.
+
+Next Obligation.
+move=> [/= T1 T2] [/= S1 S2]; apply/continuous2P; split.
+- move=> /= f g; apply/eq_cont=> - [/= x y]; congr pair=> /=.
+  + by congr sup; apply/eq_mono.
+  + by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
+- move=> /= f g; apply/eq_cont=> - [/= x y]; congr pair=> /=.
+  + by rewrite -[LHS]sup_const; congr sup; apply/eq_mono.
+  + by congr sup; apply/eq_mono.
+Qed.
+
+Program Definition pcont_functor :
+  {functor op cpoType * pcpoType -> pcpoType} :=
+  Functor (fun T => cont_pcpoType T.1 T.2)
+          (fun T S => @fmap _ _ (exp_functor cont_ccCatType) (T.1, T.2) (S.1, S.2))
+          (fun T => @fmap1 _ _ (exp_functor cont_ccCatType) (T.1, T.2))
+          (fun T S R => @fmapD _ _ (exp_functor cont_ccCatType)
+                               (T.1, T.2) (S.1, S.2) (R.1, R.2)).
+
+Program Definition pcont_cpo_functor :
+  {cpo_functor op cpoType * pcpoType -> pcpoType} :=
+  CpoFunctor pcont_functor _ _.
+
+Next Obligation.
+move=> [/= T1 T2] [/= S1 S2].
+move=> [/= f1 f2] [/= g1 g2] [/= fg1 fg2].
+move=> h /=; move=> x /=.
+apply: transitivity (fg2 _).
+apply: monoP.
+apply: monoP.
+apply: fg1.
+Qed.
+
+Next Obligation.
+move=> [/= T1 T2] [/= S1 S2].
+apply/continuous2P; split.
+- move=> /= f g; apply/eq_cont=> /= h; apply/eq_cont=> x /=.
+  rewrite {1}/sup /= /dfun_sup.
+  by rewrite -2!contP; congr sup; apply/eq_mono=> n.
+- move=> /= f g; apply/eq_cont=> /= h; apply/eq_cont=> x /=.
+  by congr sup; apply/eq_mono=> n.
 Qed.
 
 Section Void.
