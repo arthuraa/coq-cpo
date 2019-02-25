@@ -2801,6 +2801,31 @@ rewrite -(@supremumC T (val \o f) (sup (mono_flip f)) _); first exact: supP.
 - move=> m; exact: (supP (mono_dflip (mono_comp mono_val' f) m)).
 Qed.
 
+Lemma supD (T : cpoType) (f : {mono nat -> {mono nat -> T}}) :
+  sup (sup f) = sup (uncurry f ∘ ⟨1, 1⟩).
+Proof.
+have [ub_f1 least_f1] := supP (sup f).
+have [ub_f2 least_f2] := supP f.
+apply/esym/sup_unique; split.
+- move=> n /=; apply: transitivity (ub_f1 n); exact: ub_f2.
+- move=> x xP; apply: least_f1=> n.
+  suffices /least_f2 : ub f (mono_const _ x) by apply.
+  move=> {n} n m /=; apply: transitivity (xP (maxn n m))=> /=.
+  move: (monoP f (leq_maxl n m) m) => H.
+  apply: transitivity H _; apply: monoP; exact: leq_maxr.
+Qed.
+
+Lemma monotone_sup (T : cpoType) : monotone (@sup T).
+Proof.
+move=> f g fg.
+case: (supP f)=> _; apply=> n.
+apply: transitivity (fg n) _.
+case: (supP g)=> H _; exact: H.
+Qed.
+
+Definition mono_sup (T : cpoType) : {mono chain T -> T} :=
+  Mono (@sup T) (@monotone_sup T).
+
 Section Continuous.
 
 Variables T S : cpoType.
@@ -3031,6 +3056,13 @@ Definition pcpo_cont_catMixin := CatMixin pcpo_contP.
 Canonical pcpo_cont_catType :=
   Eval hnf in CatType pcpoType pcpo_cont pcpo_cont_catMixin.
 
+Lemma continuous_sup (T : cpoType) : continuous (mono_sup T).
+Proof.
+by move=> f /=; rewrite supC; do 2![congr sup; apply/eq_mono=> ?].
+Qed.
+
+Definition cont_sup (T : cpoType) := Cont (mono_sup T) (@continuous_sup T).
+
 Section ProdCpo.
 
 Variables T S : cpoType.
@@ -3204,6 +3236,55 @@ Definition cont_compp (T S R : cpoType) :
   Sub (@mono_cont_compp T S R) (@continuous_cont_compp T S R).
 Canonical cont_compp.
 Arguments cont_compp {_ _ _}.
+
+Section Kleene.
+
+Variable T : pcpoType.
+
+Lemma kfix_body_proof (f : {cont T -> T}) : monotone (fun n => iter n f ⊥).
+Proof.
+move=> n m; elim: m n=> [|m IH] [|n] //= H; try exact: botP.
+by apply: monoP; apply: IH.
+Qed.
+
+Definition kfix_body f : chain T := Mono _ (kfix_body_proof f).
+
+Lemma monotone_kfix_body : monotone kfix_body.
+Proof.
+move=> f g fg n /=; elim: n=> [|n IH]; first exact: appr_refl.
+by apply: transitivity (monoP f IH) _; apply: fg.
+Qed.
+
+Definition mono_kfix_body : {mono {cont T -> T} -> chain T} :=
+  Mono _ monotone_kfix_body.
+Canonical mono_kfix_body.
+
+Lemma continuous_kfix_body : continuous mono_kfix_body.
+Proof.
+move=> /= f; apply/eq_mono=> n /=.
+rewrite {1}/sup /= /dfun_sup /=.
+set F : nat -> {mono nat -> T} := mono_dflip _.
+elim: n=> [|n IH] /=.
+  by rewrite -[RHS]sup_const; congr sup; apply/eq_mono.
+rewrite -{}IH 2!contP -[RHS]contP.
+have -> : F n.+1 = uncurry (λ (eval _ _ ∘ ⟨mono_val' ∘ f ∘ 'π1, F n ∘ 'π2⟩)) ∘ ⟨1, 1⟩.
+  by apply/eq_mono.
+rewrite -supD; by do 2![congr sup; apply/eq_mono=> ?].
+Qed.
+
+Definition cont_kfix_body : {cont {cont T -> T} -> chain T} :=
+  Cont _ continuous_kfix_body.
+Canonical cont_kfix_body.
+
+Definition kfix : {cont {cont T -> T} -> T} :=
+  cont_sup _ ∘ cont_kfix_body.
+
+Lemma kfixP (f : {cont T -> T}) : f (kfix f) = kfix f.
+Proof.
+rewrite /kfix -contP -[RHS](sup_shift _ 1); congr sup; exact/eq_mono.
+Qed.
+
+End Kleene.
 
 Section SubsingCpo.
 
