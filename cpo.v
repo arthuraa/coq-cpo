@@ -1182,6 +1182,7 @@ End CCCatTheory.
 Local Notation "X ⇒ Y" := (exp X Y)
   (at level 25, right associativity) : cat_scope.
 Local Notation "'λ' f" := (curry f) (at level 0, f at level 9) : cat_scope.
+Arguments icomp {_ _ _ _}.
 
 Section CatCCCat.
 
@@ -1662,13 +1663,13 @@ Qed.
 Canonical subsing_choiceType :=
   Eval hnf in ChoiceType subsing subsing_choiceMixin.
 
-Definition bot_subsing_def (x : T) := False.
+Definition subsing_bot_def (x : T) := False.
 
-Lemma bot_subsing_proof x y : bot_subsing_def x -> bot_subsing_def y -> x = y.
+Lemma subsing_bot_proof x y : subsing_bot_def x -> subsing_bot_def y -> x = y.
 Proof. by []. Qed.
 
-Definition bot_subsing : subsing :=
-  Sub bot_subsing_def bot_subsing_proof.
+Definition subsing_bot : subsing :=
+  Sub subsing_bot_def subsing_bot_proof.
 
 Record sing := Sing {
   sing_val :> subsing;
@@ -1690,7 +1691,7 @@ Proof. by rewrite /sing_of=> x y /(congr1 val)/subsing_of_inj. Qed.
 
 End Singletons.
 
-Arguments bot_subsing {_}.
+Arguments subsing_bot {_}.
 Arguments subsing_of {_}.
 
 Lemma choose (T : choiceType) (X : subsing T) :
@@ -1743,6 +1744,9 @@ apply/functional_extensionality=> /= x.
 apply/eq_subsing=> y; split; first by case => _ <-.
 by move=> ?; exists x.
 Qed.
+
+Lemma liftssB T S (f : T -> subsing S) : liftss f subsing_bot = subsing_bot.
+Proof. by apply/eq_subsing=> x; split=> [[? []]|[]]. Qed.
 
 Module Po.
 
@@ -2395,10 +2399,10 @@ Definition mono_subsing_of : {mono T -> subsing T} :=
   Sub subsing_of monotone_subsing_of.
 Canonical mono_subsing_of.
 
-Lemma bot_subsingP X : bot_subsing ⊑ X.
+Lemma subsing_botP X : subsing_bot ⊑ X.
 Proof. by move=> x []. Qed.
 
-Definition subsing_ppoMixin := PpoMixin bot_subsingP.
+Definition subsing_ppoMixin := PpoMixin subsing_botP.
 Canonical subsing_ppoType :=
   Eval hnf in PpoType (subsing T) subsing_ppoMixin.
 
@@ -4482,3 +4486,62 @@ Definition univ_roll : {cont {cont 'U -> subsing (disc nat * 'U)} -> 'U} :=
 
 Definition univ_unroll : {cont 'U -> {cont 'U -> subsing (disc nat * 'U)}} :=
   unroll univ_def.
+
+(* FIXME: Find a better name for this *)
+
+Definition is_projection (f : {cont 'U -> subsing 'U}) :=
+  f ⊑ cont_subsing_of /\ f = cont_liftss f ∘ f.
+
+Record projection := Projection {
+  pval :> {cont 'U -> subsing 'U};
+  _    :  is_projection pval
+}.
+Arguments Projection _ _ : clear implicits.
+
+Canonical projection_subType := [subType for pval].
+
+Definition projP (f : projection) : is_projection f := valP f.
+
+Definition projection_choiceMixin :=
+  [choiceMixin of projection by <:].
+Canonical projection_choiceType :=
+  Eval hnf in ChoiceType projection projection_choiceMixin.
+Definition projection_poMixin :=
+  [poMixin of projection by <:].
+Canonical projection_poType :=
+  Eval hnf in PoType projection projection_poMixin.
+Canonical projection_subPoType :=
+  Eval hnf in [subPoType of projection].
+
+Program Definition projection_bot :=
+  Projection ⊥ _.
+
+Next Obligation.
+split; first exact: botP.
+by apply/eq_cont=> x /=; rewrite /fun_bot liftssB.
+Qed.
+
+Lemma projection_botP x : projection_bot ⊑ x.
+Proof. exact: botP. Qed.
+
+Definition projection_ppoMixin := PpoMixin projection_botP.
+Canonical projection_ppoType :=
+  Eval hnf in PpoType projection projection_ppoMixin.
+Canonical projection_poChoiceType := Eval hnf in PoChoiceType projection.
+
+Lemma projection_sup_clos : subCpo_axiom_of projection_subPoType.
+Proof.
+move=> /= f; have [ub_f least_f] := supP (mono_val' ∘ f); split.
+  by apply: least_f=> n /=; case: (projP (f n)).
+rewrite -contP /=.
+change (sup (mono2_cont_liftss ∘ (mono_val' ∘ f)) ∘ sup (mono_val' ∘ f))
+  with (cont_compp (sup (mono2_cont_liftss ∘ (mono_val' ∘ f)), sup (mono_val' ∘ f))).
+rewrite -sup_pairf -contP; congr sup; apply/eq_mono=> n /=.
+by rewrite (proj2 (projP (f n))).
+Qed.
+
+Canonical projection_subCpoType := SubCpoType projection_sup_clos.
+Definition projection_cpoMixin := [cpoMixin of projection by <:].
+Canonical projection_cpoType :=
+  Eval hnf in CpoType projection projection_cpoMixin.
+Canonical projection_pcpoType := Eval hnf in PcpoType projection.
