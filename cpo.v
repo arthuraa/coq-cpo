@@ -26,6 +26,8 @@ Unset Printing Implicit Defensive.
 
 - Name categories after objects instead of hom sets
 
+- Get rid of invlim_proj
+
 *)
 
 Obligation Tactic := idtac.
@@ -3619,6 +3621,180 @@ Lemma embD (T S R : cpoType) (p1 : {retr S -> R}) (p2 : {retr T -> S}) :
   (p1 ∘ p2)^e = p2^e ∘ p1^e.
 Proof. by []. Qed.
 
+Section Projections.
+
+Variable T : cpoType.
+
+Definition projection (p : {cont T -> T}) :=
+  p ⊑ 1 /\ p ∘ p = p.
+
+Record proj := Proj {
+  proj_val :> {cont T -> T};
+  _        :  projection proj_val
+}.
+
+Implicit Types p q s : proj.
+
+Canonical proj_subType := [subType for proj_val].
+Definition proj_choiceMixin :=
+  [choiceMixin of proj by <:].
+Canonical proj_choiceType :=
+  Eval hnf in ChoiceType proj proj_choiceMixin.
+
+Definition projP p : projection p := valP p.
+
+Lemma eq_proj p q : p =1 q <-> p = q.
+Proof. by split=> [e|-> //]; apply/val_inj/eq_cont. Qed.
+
+Definition proj_appr p q : Prop :=
+  proj_val p ∘ q = p /\ proj_val q ∘ p = p.
+
+Lemma proj_apprP : Po.axioms proj_appr.
+Proof.
+split.
+- by move=> p; split; case: (projP p).
+- move=> p q s [pq qp] [qs sq]; split.
+  + by rewrite -{1}pq -compA qs pq.
+  + by rewrite -{1}qp  compA sq qp.
+- by move=> p q [pq _] [_ pq']; apply/val_inj; rewrite /= -[LHS]pq -[RHS]pq'.
+Qed.
+
+Definition proj_poMixin := PoMixin proj_apprP.
+Canonical proj_poType := Eval hnf in PoType proj proj_poMixin.
+Canonical proj_poChoiceType := Eval hnf in PoChoiceType proj.
+
+Lemma monotone_proj_val : monotone proj_val.
+Proof.
+move=> p q [<- qp]; rewrite -{2}[proj_val q]comp1f.
+by move=> x /=; apply: (proj1 (projP p)).
+Qed.
+
+Definition mono_proj_val : {mono proj -> {cont T -> T}} :=
+  Mono proj_val monotone_proj_val.
+Canonical mono_proj_val.
+
+Program Definition proj_sup (p : chain proj) : proj :=
+  Sub (sup (mono_proj_val ∘ p)) _.
+
+Next Obligation.
+move=> p; split.
+- have [_ least_p] := supP (mono_proj_val ∘ p); apply: least_p.
+  move=> n; exact: (proj1 (projP (p n))).
+- change (sup (mono_proj_val ∘ p) ∘ sup (mono_proj_val ∘ p)) with
+    (cont_compp (sup (mono_proj_val ∘ p), sup (mono_proj_val ∘ p))).
+  rewrite -sup_pairf -contP; congr sup; apply/eq_mono=> n /=.
+  by rewrite -[RHS](proj2 (projP (p n))).
+Qed.
+
+Lemma proj_supP (p : chain proj) : supremum p (proj_sup p).
+Proof.
+rewrite /proj_sup; split.
+- move=> n; split=> /=.
+  + rewrite continuous_cont_compR -(sup_shift _ n) -[RHS]sup_const.
+    congr sup; apply/eq_mono=> m /=; rewrite /constfun.
+    by have [e _] := monoP p (leq_addr m n); rewrite -[RHS]e.
+  + rewrite continuous_cont_compL -(sup_shift _ n) -[RHS]sup_const.
+    congr sup; apply/eq_mono=> m /=; rewrite /constfun.
+    by have [_ e] := monoP p (leq_addr m n); rewrite -[RHS]e.
+- move=> q ub_q; split=> /=.
+  + rewrite continuous_cont_compL; congr sup; apply/eq_mono=> n /=.
+    by have [e _] := ub_q n; rewrite -[RHS]e.
+  + rewrite continuous_cont_compR; congr sup; apply/eq_mono=> n /=.
+    by have [_ e] := ub_q n; rewrite -[RHS]e.
+Qed.
+
+Definition proj_cpoMixin := CpoMixin proj_supP.
+Canonical proj_cpoType := Eval hnf in CpoType proj proj_cpoMixin.
+
+Program Definition proj_top : proj := @Proj 1 _.
+Next Obligation. by split; [reflexivity|rewrite comp1f]. Qed.
+
+Lemma proj_topP p : p ⊑ proj_top.
+Proof. by split; rewrite ?comp1f ?compf1. Qed.
+
+Program Definition proj_of_retr (S : cpoType) (r : {retr T -> S}) : proj :=
+  @Proj (r^e ∘ r) _.
+
+Next Obligation.
+move=> S r; split; first exact: (proj2 (retrP r)).
+by rewrite compA -(compA r^e) (proj1 (retrP r)) compf1.
+Qed.
+
+Section RetrOfProj.
+
+Variable p : proj.
+
+Record rop := ROP {
+  rop_val : T;
+  _       : exists x, p x = rop_val
+}.
+
+Lemma ropP (x : rop) : p (rop_val x) = rop_val x.
+Proof.
+by case: x=> [x [x' xP]] /=; rewrite -xP -[in RHS](proj2 (projP p)).
+Qed.
+
+Canonical rop_subType := [subType for rop_val].
+Definition rop_choiceMixin := [choiceMixin of rop by <:].
+Canonical rop_choiceType := Eval hnf in ChoiceType rop rop_choiceMixin.
+Definition rop_poMixin := [poMixin of rop by <:].
+Canonical rop_poType := Eval hnf in PoType rop rop_poMixin.
+Canonical rop_subPoType := [subPoType of rop].
+Canonical rop_poChoiceType := Eval hnf in PoChoiceType rop.
+
+Lemma rop_sup_clos : subCpo_axiom_of rop_subPoType.
+Proof.
+move=> /= x; exists (sup (mono_val' ∘ x)).
+by rewrite -contP; congr sup; apply/eq_mono=> n /=; rewrite ropP.
+Qed.
+
+Canonical rop_subCpoType := Eval hnf in SubCpoType rop_sup_clos.
+Definition rop_cpoMixin := [cpoMixin of rop by <:].
+Canonical rop_cpoType := Eval hnf in CpoType rop rop_cpoMixin.
+
+Program Definition retr_of_proj : {retr T -> rop} :=
+  @Retr _ _ (Cont (Mono (fun x => Sub (p x) _) _) _, cont_val') _.
+
+Next Obligation. by simpl; eauto. Qed.
+Next Obligation. move=> x1 x2 /(monoP p); exact. Qed.
+Next Obligation.
+by move=> x; apply/val_inj; rewrite /= -contP; congr sup; apply/eq_mono.
+Qed.
+Next Obligation.
+split; first by apply/eq_cont=> x /=; apply/val_inj; exact: ropP.
+move=> x /=; exact: (proj1 (projP p)).
+Qed.
+
+End RetrOfProj.
+
+Lemma retr_of_projK p : proj_of_retr (retr_of_proj p) = p.
+Proof. exact/eq_proj. Qed.
+
+End Projections.
+
+Arguments Proj {_} _ _.
+
+Section PointedProj.
+
+Variable T : pcpoType.
+
+Program Definition proj_bot : proj T := Proj (@cont_const T T ⊥) _.
+Next Obligation. split; [exact/botP|exact/eq_cont]. Qed.
+
+Lemma proj_botP p : proj_bot ⊑ p.
+Proof.
+split; first exact/eq_cont.
+apply/eq_cont=> x /=; rewrite /constfun.
+apply/appr_anti; last exact: botP.
+exact: (proj1 (projP p)).
+Qed.
+
+Definition proj_ppoMixin := PpoMixin proj_botP.
+Canonical proj_ppoType := Eval hnf in PpoType (proj T) proj_ppoMixin.
+Canonical proj_pcpoType := Eval hnf in PcpoType (proj T).
+
+End PointedProj.
+
 Section BiLimit.
 
 Variables (T : nat -> cpoType) (p : forall n, {retr T n.+1 -> T n}).
@@ -3788,10 +3964,10 @@ Proof. by apply/eq_retr=> x /=; rewrite downl_outlim. Qed.
 Lemma emb_outlim n : (retr_outlim n)^e = cont_inlim n.
 Proof. by []. Qed.
 
-Definition proj n : {cont invlim p -> invlim p} :=
+Definition invlim_proj n : {cont invlim p -> invlim p} :=
   cont_inlim n ∘ cont_outlim n.
 
-Lemma projI n m : proj n ∘ proj m = proj (minn n m).
+Lemma invlim_projI n m : invlim_proj n ∘ invlim_proj m = invlim_proj (minn n m).
 Proof.
 apply/eq_cont=> /= x; apply: val_inj.
 rewrite /minn; case: ltnP=> [nm|mn] /=.
@@ -3810,22 +3986,22 @@ rewrite (inlim_defEL _ nk) (eq_irrelevance mk (leq_trans mn nk)).
 by rewrite downlD.
 Qed.
 
-Lemma leq_proj_id n : proj n ⊑ 1.
+Lemma leq_invlim_proj_id n : invlim_proj n ⊑ 1.
 Proof. exact: (retrD (retr_outlim n)). Qed.
 
-Lemma monotone_proj : monotone proj.
+Lemma monotone_invlim_proj : monotone invlim_proj.
 Proof.
-move=> /= n m /minn_idPr <-; rewrite -projI=> x /=.
-exact: (monoP (proj m) (leq_proj_id n x)).
+move=> /= n m /minn_idPr <-; rewrite -invlim_projI=> x /=.
+exact: (monoP (invlim_proj m) (leq_invlim_proj_id n x)).
 Qed.
 
-Definition mono_proj : {mono nat -> {cont invlim p -> invlim p}} :=
-  Sub proj monotone_proj.
-Canonical mono_proj.
+Definition mono_invlim_proj : {mono nat -> {cont invlim p -> invlim p}} :=
+  Sub invlim_proj monotone_invlim_proj.
+Canonical mono_invlim_proj.
 
-Lemma sup_proj : sup mono_proj = 1.
+Lemma sup_invlim_proj : sup mono_invlim_proj = 1.
 Proof.
-apply: sup_unique; split; first exact: leq_proj_id.
+apply: sup_unique; split; first exact: leq_invlim_proj_id.
 move=> /= f ub_f; move=> /= x; move=> /= n.
 move: (ub_f n x n)=> /=.
 by rewrite (inlim_defER _ (leqnn n)) downl0.
@@ -4432,14 +4608,14 @@ Qed.
 Lemma rollK : unroll ∘ cont_roll = 1.
 Proof.
 rewrite /unroll continuous_cont_compL /= -[RHS](fmap1 F) /=.
-change 1 with (cat_id (Pcpo.cpoType mu), cat_id (Pcpo.cpoType mu)); rewrite -sup_proj.
+change 1 with (cat_id (Pcpo.cpoType mu), cat_id (Pcpo.cpoType mu)); rewrite -sup_invlim_proj.
 rewrite -sup_pairf.
-change (fmap F (sup (mono_pairf (mono_proj chain_mor) (mono_proj chain_mor))))
+change (fmap F (sup (mono_pairf (mono_invlim_proj chain_mor) (mono_invlim_proj chain_mor))))
   with (Mono _ (@cpo_fmap_mono _ _ F (Op mu, mu) (Op mu, mu))
-             (sup (mono_pairf (mono_proj chain_mor) (mono_proj chain_mor)))).
+             (sup (mono_pairf (mono_invlim_proj chain_mor) (mono_invlim_proj chain_mor)))).
 rewrite -cpo_fmap_cont -(sup_shift _ 1); congr sup; apply/eq_mono=> /= n /=.
 apply/eq_cont=> x /=; rewrite /outlim; unfold pairf; simpl.
-by rewrite /f_emb /= /proj fmapD.
+by rewrite /f_emb /= /invlim_proj fmapD.
 Qed.
 
 End RecType.
@@ -4499,167 +4675,3 @@ End UnivDef.
 Notation "'U" := UnivDef.univ.
 Notation univ_roll := UnivDef.univ_roll.
 Notation univ_unroll := UnivDef.univ_unroll.
-
-(* FIXME: Find a better name for this *)
-
-Definition is_projection (f : {cont 'U -> subsing 'U}) :=
-  f ⊑ cont_subsing_of /\ f = cont_liftss f ∘ f.
-
-Record projection := Projection {
-  pval :> {cont 'U -> subsing 'U};
-  _    :  is_projection pval
-}.
-Arguments Projection _ _ : clear implicits.
-
-Canonical projection_subType := [subType for pval].
-
-Definition projP (f : projection) : is_projection f := valP f.
-
-Definition projection_choiceMixin :=
-  [choiceMixin of projection by <:].
-Canonical projection_choiceType :=
-  Eval hnf in ChoiceType projection projection_choiceMixin.
-Definition projection_poMixin :=
-  [poMixin of projection by <:].
-Canonical projection_poType :=
-  Eval hnf in PoType projection projection_poMixin.
-Canonical projection_subPoType :=
-  Eval hnf in [subPoType of projection].
-
-Program Definition projection_bot :=
-  Projection ⊥ _.
-
-Next Obligation.
-split; first exact: botP.
-by apply/eq_cont=> x /=; rewrite /fun_bot liftssB.
-Qed.
-
-Lemma projection_botP x : projection_bot ⊑ x.
-Proof. exact: botP. Qed.
-
-Definition projection_ppoMixin := PpoMixin projection_botP.
-Canonical projection_ppoType :=
-  Eval hnf in PpoType projection projection_ppoMixin.
-Canonical projection_poChoiceType := Eval hnf in PoChoiceType projection.
-
-Lemma projection_sup_clos : subCpo_axiom_of projection_subPoType.
-Proof.
-move=> /= f; have [ub_f least_f] := supP (mono_val' ∘ f); split.
-  by apply: least_f=> n /=; case: (projP (f n)).
-rewrite -contP /=.
-change (sup (mono2_cont_liftss ∘ (mono_val' ∘ f)) ∘ sup (mono_val' ∘ f))
-  with (cont_compp (sup (mono2_cont_liftss ∘ (mono_val' ∘ f)), sup (mono_val' ∘ f))).
-rewrite -sup_pairf -contP; congr sup; apply/eq_mono=> n /=.
-by rewrite (proj2 (projP (f n))).
-Qed.
-
-Canonical projection_subCpoType := SubCpoType projection_sup_clos.
-Definition projection_cpoMixin := [cpoMixin of projection by <:].
-Canonical projection_cpoType :=
-  Eval hnf in CpoType projection projection_cpoMixin.
-Canonical projection_pcpoType := Eval hnf in PcpoType projection.
-
-Section CpoOfProjection.
-
-Variable T : projection.
-
-Record cpo_of_projection := CpoOfProjection {
-  cop_val : 'U;
-  _       : exists x : 'U, T x = subsing_of cop_val
-}.
-Arguments CpoOfProjection _ _ : clear implicits.
-
-Lemma copP x : T (cop_val x) = subsing_of (cop_val x).
-Proof.
-case: x=> [x [x' xP]] /=; rewrite -xP.
-rewrite [in RHS](proj2 (projP T)) /= xP.
-by rewrite -{1}(liftss_comp1 T).
-Qed.
-
-Canonical cpo_of_projection_subType :=
-  [subType for cop_val].
-Definition cpo_of_projection_choiceMixin :=
-  [choiceMixin of cpo_of_projection by <:].
-Canonical cpo_of_projection_choiceType :=
-  Eval hnf in ChoiceType cpo_of_projection
-                         cpo_of_projection_choiceMixin.
-Definition cpo_of_projection_poMixin :=
-  [poMixin of cpo_of_projection by <:].
-Canonical cpo_of_projection_poType :=
-  Eval hnf in PoType cpo_of_projection
-                     cpo_of_projection_poMixin.
-Canonical cpo_of_projection_subPoType :=
-  [subPoType of cpo_of_projection].
-Canonical cpo_of_projection_poChoiceType :=
-  Eval hnf in PoChoiceType cpo_of_projection.
-
-Lemma cpo_of_projection_sup_clos :
-  subCpo_axiom_of cpo_of_projection_subPoType.
-Proof.
-move=> /= x; exists (sup (mono_val' ∘ x)).
-rewrite -[LHS]contP -[RHS]contP; congr sup.
-by apply/eq_mono=> n /=; rewrite copP.
-Qed.
-
-Canonical cpo_of_projection_subCpoType :=
-  Eval hnf in SubCpoType cpo_of_projection_sup_clos.
-Definition cpo_of_projection_cpoMixin :=
-  [cpoMixin of cpo_of_projection by <:].
-Canonical cpo_of_projection_cpoType :=
-  Eval hnf in CpoType cpo_of_projection cpo_of_projection_cpoMixin.
-
-Program Definition of_univ (x : 'U) : subsing cpo_of_projection :=
-  Sub (fun y => T x (cop_val y)) _.
-
-Next Obligation.
-move=> /= x y1 y2 y1P y2P; apply/val_inj; exact: subsingP y1P y2P.
-Qed.
-
-Lemma monotone_of_univ : monotone of_univ.
-Proof.
-move=> x1 x2 /(monoP T) x12 y1 /= y1P.
-case/x12: (y1P)=> [y2' y2'P y12'] /=.
-have y2P: exists x2, T x2 = subsing_of y2'.
-  by exists x2; apply: in_subsing.
-by exists (CpoOfProjection y2' y2P).
-Qed.
-
-Definition mono_of_univ : {mono 'U -> subsing cpo_of_projection} :=
-  Mono _ monotone_of_univ.
-Canonical mono_of_univ.
-
-Lemma continuous_of_univ : continuous mono_of_univ.
-Proof.
-move=> x; apply/eq_subsing=> y; split=> /=.
-- case=> {y} y /= [n [yP ->]].
-  by rewrite -contP; exists (mono_val' ∘ y); exists n; split=> //.
-- rewrite -contP; case=> x' /= [m [xP e]].
-  have x'P: forall n, exists x0, T x0 = subsing_of (x' n).
-    by move=> n; exists (x (m + n)); apply: in_subsing; eauto.
-  pose y' : chain cpo_of_projection :=
-    Mono (fun n => CpoOfProjection (x' n) (x'P n)) (monoP x').
-  exists y'; exists m; split; first by move=> n /=; exact: xP.
-  by apply/val_inj=> /=; rewrite e; congr sup; apply/eq_mono.
-Qed.
-
-Definition cont_of_univ : {cont 'U -> subsing cpo_of_projection} :=
-  Cont mono_of_univ continuous_of_univ.
-Canonical cont_of_univ.
-
-Lemma cop_valK : cont_of_univ ∘ cont_val' = cont_subsing_of.
-Proof.
-apply/eq_cont=> x; case: x (copP x)=> x ? /= xP.
-apply/eq_subsing=> y /=; rewrite xP /=.
-split=> [?|<-] //; exact: val_inj.
-Qed.
-
-Lemma cont_of_univK : cont_liftss (cont_subsing_of ∘ cont_val') ∘ cont_of_univ = T.
-Proof.
-apply/eq_cont=> x /=; apply/eq_subsing=> x'; split.
-  by case=> y /= ? <-.
-move=> e /=.
-suffices x'P: exists x, T x = subsing_of x' by exists (Sub x' x'P).
-by exists x; apply: in_subsing.
-Qed.
-
-End CpoOfProjection.
