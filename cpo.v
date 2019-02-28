@@ -4545,3 +4545,92 @@ Definition projection_cpoMixin := [cpoMixin of projection by <:].
 Canonical projection_cpoType :=
   Eval hnf in CpoType projection projection_cpoMixin.
 Canonical projection_pcpoType := Eval hnf in PcpoType projection.
+
+Section CpoOfProjection.
+
+Variable T : projection.
+
+Record cpo_of_projection := CpoOfProjection {
+  cop_val : 'U;
+  _       : exists x : 'U, T x = subsing_of cop_val
+}.
+Arguments CpoOfProjection _ _ : clear implicits.
+
+Lemma copP x : T (cop_val x) = subsing_of (cop_val x).
+Proof.
+case: x=> [x [x' xP]] /=; rewrite -xP.
+rewrite [in RHS](proj2 (projP T)) /= xP.
+by rewrite -{1}(liftss_comp1 T).
+Qed.
+
+Canonical cpo_of_projection_subType :=
+  [subType for cop_val].
+Definition cpo_of_projection_choiceMixin :=
+  [choiceMixin of cpo_of_projection by <:].
+Canonical cpo_of_projection_choiceType :=
+  Eval hnf in ChoiceType cpo_of_projection
+                         cpo_of_projection_choiceMixin.
+Definition cpo_of_projection_poMixin :=
+  [poMixin of cpo_of_projection by <:].
+Canonical cpo_of_projection_poType :=
+  Eval hnf in PoType cpo_of_projection
+                     cpo_of_projection_poMixin.
+Canonical cpo_of_projection_subPoType :=
+  [subPoType of cpo_of_projection].
+Canonical cpo_of_projection_poChoiceType :=
+  Eval hnf in PoChoiceType cpo_of_projection.
+
+Lemma cpo_of_projection_sup_clos :
+  subCpo_axiom_of cpo_of_projection_subPoType.
+Proof.
+move=> /= x; exists (sup (mono_val' ∘ x)).
+rewrite -[LHS]contP -[RHS]contP; congr sup.
+by apply/eq_mono=> n /=; rewrite copP.
+Qed.
+
+Canonical cpo_of_projection_subCpoType :=
+  Eval hnf in SubCpoType cpo_of_projection_sup_clos.
+Definition cpo_of_projection_cpoMixin :=
+  [cpoMixin of cpo_of_projection by <:].
+Canonical cpo_of_projection_cpoType :=
+  Eval hnf in CpoType cpo_of_projection cpo_of_projection_cpoMixin.
+
+Program Definition of_univ (x : 'U) : subsing cpo_of_projection :=
+  Sub (fun y => T x (cop_val y)) _.
+
+Next Obligation.
+move=> /= x y1 y2 y1P y2P; apply/val_inj; exact: subsingP y1P y2P.
+Qed.
+
+Lemma monotone_of_univ : monotone of_univ.
+Proof.
+move=> x1 x2 /(monoP T) x12 y1 /= y1P.
+case/x12: (y1P)=> [y2' y2'P y12'] /=.
+have y2P: exists x2, T x2 = subsing_of y2'.
+  by exists x2; apply: in_subsing.
+by exists (CpoOfProjection y2' y2P).
+Qed.
+
+Definition mono_of_univ : {mono 'U -> subsing cpo_of_projection} :=
+  Mono _ monotone_of_univ.
+Canonical mono_of_univ.
+
+Lemma continuous_of_univ : continuous mono_of_univ.
+Proof.
+move=> x; apply/eq_subsing=> y; split=> /=.
+- case=> {y} y /= [n [yP ->]].
+  by rewrite -contP; exists (mono_val' ∘ y); exists n; split=> //.
+- rewrite -contP; case=> x' /= [m [xP e]].
+  have x'P: forall n, exists x0, T x0 = subsing_of (x' n).
+    by move=> n; exists (x (m + n)); apply: in_subsing; eauto.
+  pose y' : chain cpo_of_projection :=
+    Mono (fun n => CpoOfProjection (x' n) (x'P n)) (monoP x').
+  exists y'; exists m; split; first by move=> n /=; exact: xP.
+  by apply/val_inj=> /=; rewrite e; congr sup; apply/eq_mono.
+Qed.
+
+Definition cont_of_univ : {cont 'U -> subsing cpo_of_projection} :=
+  Cont mono_of_univ continuous_of_univ.
+Canonical cont_of_univ.
+
+End CpoOfProjection.
