@@ -1691,6 +1691,7 @@ Proof. by rewrite /sing_of=> x y /(congr1 val)/subsing_of_inj. Qed.
 
 End Singletons.
 
+Arguments Subsing {_} _ _.
 Arguments subsing_bot {_}.
 Arguments subsing_of {_}.
 
@@ -3369,7 +3370,7 @@ apply: propositional_extensionality; split.
   pose P m x := X (n + m) x /\ f x (y m).
   have Pss : forall m x1 x2, P m x1 -> P m x2 -> x1 = x2.
     by move=> m x1 x2 [/= H1 _] [/= H2 _]; apply: subsingP H1 H2.
-  have {fXE} fXE: forall m, exists x, (Subsing (Pss m)) x.
+  have {fXE} fXE: forall m, exists x, (Subsing _ (Pss m)) x.
     by move=> m; rewrite /=; case: (fXE m); rewrite /P /=; eauto.
   pose x m := val (choose (fXE m)).
   have x_mono : monotone x.
@@ -4470,6 +4471,16 @@ Canonical disc_cpoType := Eval hnf in CpoType disc disc_cpoMixin.
 
 End Disc.
 
+Module Type UNIV.
+Variable univ : pcpoType.
+Variable univ_roll : {cont {cont univ -> subsing (disc nat * univ)} -> univ}.
+Variable univ_unroll : {cont univ -> {cont univ -> subsing (disc nat * univ)}}.
+Hypothesis univ_rollK : univ_unroll ∘ univ_roll = 1.
+Hypothesis univ_unrollK : univ_roll ∘ univ_unroll = 1.
+End UNIV.
+
+Module UnivDef : UNIV.
+
 Definition univ_def : {cpo_functor op pcpoType * pcpoType -> pcpoType} :=
   pcont_cpo_functor ∘ ⟨op_cpo_functor cpo_of_pcpo_cpo_functor ∘ 'π1,
                        subsing_cpo_functor ∘
@@ -4478,14 +4489,16 @@ Definition univ_def : {cpo_functor op pcpoType * pcpoType -> pcpoType} :=
                             cpo_of_pcpo_cpo_functor ∘ 'π2⟩⟩.
 
 Definition univ : pcpoType := mu univ_def.
+Definition univ_roll := cont_roll univ_def.
+Definition univ_unroll := unroll univ_def.
+Definition univ_rollK : univ_unroll ∘ univ_roll = 1 := rollK _.
+Definition univ_unrollK : univ_roll ∘ univ_unroll = 1 := unrollK _.
 
-Notation "'U" := univ.
+End UnivDef.
 
-Definition univ_roll : {cont {cont 'U -> subsing (disc nat * 'U)} -> 'U} :=
-  cont_roll univ_def.
-
-Definition univ_unroll : {cont 'U -> {cont 'U -> subsing (disc nat * 'U)}} :=
-  unroll univ_def.
+Notation "'U" := UnivDef.univ.
+Notation univ_roll := UnivDef.univ_roll.
+Notation univ_unroll := UnivDef.univ_unroll.
 
 (* FIXME: Find a better name for this *)
 
@@ -4632,5 +4645,21 @@ Qed.
 Definition cont_of_univ : {cont 'U -> subsing cpo_of_projection} :=
   Cont mono_of_univ continuous_of_univ.
 Canonical cont_of_univ.
+
+Lemma cop_valK : cont_of_univ ∘ cont_val' = cont_subsing_of.
+Proof.
+apply/eq_cont=> x; case: x (copP x)=> x ? /= xP.
+apply/eq_subsing=> y /=; rewrite xP /=.
+split=> [?|<-] //; exact: val_inj.
+Qed.
+
+Lemma cont_of_univK : cont_liftss (cont_subsing_of ∘ cont_val') ∘ cont_of_univ = T.
+Proof.
+apply/eq_cont=> x /=; apply/eq_subsing=> x'; split.
+  by case=> y /= ? <-.
+move=> e /=.
+suffices x'P: exists x, T x = subsing_of x' by exists (Sub x' x'P).
+by exists x; apply: in_subsing.
+Qed.
 
 End CpoOfProjection.
