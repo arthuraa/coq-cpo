@@ -4589,13 +4589,11 @@ Definition cone_proj_of_retr
     (cone_proj Y)
     (fun n => coneP Y (leqnSn n)).
 
-(*
-
 Section PointedProj.
 
 Variable T : pcpoType.
 
-Program Definition proj_bot : proj T := Proj (@cont_const T T ⊥) _.
+Program Definition proj_bot : proj pcpo_cpoCatType T := Proj _ (@cont_const T T ⊥) _.
 Next Obligation. split; [exact/botP|exact/eq_cont]. Qed.
 
 Lemma proj_botP p : proj_bot ⊑ p.
@@ -4607,12 +4605,10 @@ exact: (proj1 (projP p)).
 Qed.
 
 Definition proj_ppoMixin := PpoMixin proj_botP.
-Canonical proj_ppoType := Eval hnf in PpoType (proj T) proj_ppoMixin.
-Canonical proj_pcpoType := Eval hnf in PcpoType (proj T).
+Canonical proj_ppoType := Eval hnf in PpoType (proj pcpo_cpoCatType T) proj_ppoMixin.
+Canonical proj_pcpoType := Eval hnf in PcpoType (proj pcpo_cpoCatType T).
 
 End PointedProj.
-
-*)
 
 Record cont_functor (C D : cpoCatType) := ContFunctor {
   cont_f_val  :> {functor retr_catType C -> retr_catType D};
@@ -4790,6 +4786,41 @@ Canonical cont_functor_cartCatType :=
   @CartCat.Pack
     cpoCatType cont_functor
     (CartCat.Class cont_functor_termCatMixin cont_functor_prodCatMixin).
+
+(* Promote a CPO-functor to a continuous functor.  This could be made into
+   a functor, but we won't need the additional structure. *)
+
+Program Definition cont_of_cpo_functor
+  (C D : cpoCatType) (F : {cpo_functor C -> D}) : cont_functor C D :=
+  ContFunctor (Functor F (fun X Y f => Retr (fmap F f.1, fmap F f.2) _) _ _) _.
+
+Next Obligation.
+move=> C D F X Y f; split; rewrite /= -fmapD ?embK ?fmap1 //.
+rewrite -fmap1; apply: monoP; exact/retr1.
+Qed.
+
+Next Obligation.
+by move=> C D F X; apply/retr_retr_inj; rewrite /= fmap1.
+Qed.
+
+Next Obligation.
+by move=> C D F X Y Z f g; apply/retr_retr_inj; rewrite /= fmapD.
+Qed.
+
+Next Obligation.
+move=> C D F X f Y g gP /(congr1 (fmap F \o proj_val)) /=.
+rewrite -contP fmap1 => e; apply/val_inj=> /=.
+by rewrite -e; congr sup; apply/eq_mono=> n /=; rewrite fmapD.
+Qed.
+
+Program Definition cont_functor_op C : cont_functor C (op_cpoCatType C) :=
+  ContFunctor (iso1 (retr_op C)) _.
+
+Next Obligation.
+move=> C X f Y g gP /(congr1 proj_val) /= e; apply/val_inj=> /=.
+rewrite [in RHS]/cat_id /=; unfold op_id; rewrite -e.
+by congr sup; apply/eq_mono.
+Qed.
 
 Section BiLimit.
 
