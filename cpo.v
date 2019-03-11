@@ -770,6 +770,15 @@ change (m.+1 + n) with (m + n).+1 => nm.
 by rewrite !(downS _ (leq_addl m n)) fmapD IH.
 Qed.
 
+Lemma down_comp_cone
+  (C D : catType@{i j}) (X : nat -> C) (f : forall n, C (X n.+1) (X n))
+  Y (g : forall n, C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1)
+  (F : {functor C -> D}) :
+  forall n, fmap F (g n) = fmap F (f n) ∘ fmap F (g n.+1).
+Proof. by move=> n; rewrite -fmapD gP. Qed.
+
+Arguments down_comp_cone {_ _ _} _ {_} _ _ _ _.
+
 End NatCat.
 
 Section ProdCatCat.
@@ -4249,6 +4258,142 @@ End Retractions.
 Arguments Retr {_ _ _} _ _.
 Arguments retr_id {_}.
 
+Program Definition retr_cat_functor : {functor cpoCatType -> catType} :=
+  Functor
+    retr_catType
+    (fun C D F => Functor F
+                          (fun X Y f => Retr (fmap F (val f).1,
+                                              fmap F (val f).2) _) _ _) _ _.
+
+Next Obligation.
+move=> /= C D F X Y r; split; first by rewrite -fmapD embK fmap1.
+rewrite -(fmap1 F) -fmapD; apply: monoP; exact: retr1.
+Qed.
+
+Next Obligation.
+by move=> /= C D F X; apply: retr_retr_inj; rewrite /= fmap1.
+Qed.
+
+Next Obligation.
+by move=> /= C D F X Y Z f g; apply: retr_retr_inj; rewrite /= fmapD.
+Qed.
+
+Next Obligation.
+move=> /= C; apply/eq_functor=> /=; congr Tagged.
+apply/functional_extensionality_dep=> X.
+apply/functional_extensionality_dep=> Y.
+apply/functional_extensionality=> r.
+exact: val_inj.
+Qed.
+
+Next Obligation.
+move=> /= C D E F G.
+apply/eq_functor; congr Tagged=> /=.
+apply/functional_extensionality_dep=> X.
+apply/functional_extensionality_dep=> Y.
+apply/functional_extensionality=> f.
+exact: val_inj.
+Qed.
+
+Program Definition retr_prod (C D : cpoCatType) :
+  iso _
+      (retr_catType (C × D))
+      (retr_catType C × retr_catType D) :=
+  @Iso _ _ _
+       (Functor id (fun X Y f => (Retr (f.1.1, f.2.1) _, Retr (f.1.2, f.2.2) _)) _ _)
+       (Functor id (fun X Y f => Retr ((f.1.1, f.2.1), (f.1.2, f.2.2)) _) _ _) _ _.
+
+Next Obligation.
+move=> /= C D X Y f; split; first by case: (embK f).
+by case: (retr1 f).
+Qed.
+
+Next Obligation.
+move=> /= C D X Y f; split; first by case: (embK f).
+by case: (retr1 f).
+Qed.
+
+Next Obligation.
+by move=> /= C D X; congr pair; apply/retr_retr_inj.
+Qed.
+
+Next Obligation.
+by move=> /= C D X Y Z f g; congr pair; apply/retr_retr_inj.
+Qed.
+
+Next Obligation.
+move=> /= C D X Y f; split; rewrite prod_cat_compE /= ?embK //.
+split; exact: retr1.
+Qed.
+
+Next Obligation.
+by move=> /= C D X; apply/retr_retr_inj.
+Qed.
+
+Next Obligation.
+by move=> /= C D X Y Z f g; apply/retr_retr_inj; rewrite /= prod_cat_compE /=.
+Qed.
+
+Next Obligation.
+move=> C D; apply/eq_functor; congr Tagged=> /=.
+apply/functional_extensionality_dep=> X.
+apply/functional_extensionality_dep=> Y.
+apply/functional_extensionality=> f.
+by apply/retr_retr_inj.
+Qed.
+
+Next Obligation.
+move=> C D; apply/eq_functor; congr Tagged=> /=.
+apply/functional_extensionality_dep=> X.
+apply/functional_extensionality_dep=> Y.
+apply/functional_extensionality=> f.
+congr pair; by apply/retr_retr_inj.
+Qed.
+
+Program Definition retr_op (C : cpoCatType) :
+  iso _
+      (retr_catType C)
+      (retr_catType (op_cpoCatType C)) :=
+  @Iso _ _ _
+    (Functor id (fun X Y f => Retr (f.2, f.1) _) _ _)
+    (Functor id (fun X Y f => Retr (f.2, f.1) _) _ _) _ _.
+
+Next Obligation.
+move=> /= C X Y f; split; rewrite op_compE /of_op ?embK //.
+exact: retr1.
+Qed.
+
+Next Obligation.
+move=> /= C X; exact: retr_retr_inj.
+Qed.
+
+Next Obligation.
+by move=> /= C X Y Z f g; apply: retr_retr_inj.
+Qed.
+
+Next Obligation.
+move=> /= C X Y f; split; first exact: (embK f).
+exact: (retr1 f).
+Qed.
+
+Next Obligation.
+by move=> /= C X; apply: retr_retr_inj.
+Qed.
+
+Next Obligation.
+by move=> /= C X Y Z f g; apply: retr_retr_inj.
+Qed.
+
+Next Obligation.
+move=> /= C; apply/eq_functor; congr Tagged=> /=.
+by do 3![apply/functional_extensionality_dep=> ?]; apply: retr_retr_inj.
+Qed.
+
+Next Obligation.
+move=> /= C; apply/eq_functor; congr Tagged=> /=.
+by do 3![apply/functional_extensionality_dep=> ?]; apply: retr_retr_inj.
+Qed.
+
 Section Projections.
 
 Variable C : cpoCatType.
@@ -4435,6 +4580,15 @@ Arguments Proj {_} _ _.
 Arguments proj_val {_ _}.
 Arguments proj_top {_ _}.
 
+Definition cone_proj_of_retr
+  (C : cpoCatType) (X : {functor op nat -> retr_catType C}) (Y : cone X) :
+  chain (proj C (cone_tip Y)) :=
+  @mono_proj_of_retr
+    C (cone_tip Y) X
+    (fun n => fmap X (leqnSn n))
+    (cone_proj Y)
+    (fun n => coneP Y (leqnSn n)).
+
 (*
 
 Section PointedProj.
@@ -4459,6 +4613,183 @@ Canonical proj_pcpoType := Eval hnf in PcpoType (proj T).
 End PointedProj.
 
 *)
+
+Record cont_functor (C D : cpoCatType) := ContFunctor {
+  cont_f_val  :> {functor retr_catType C -> retr_catType D};
+  cont_f_valP :
+    forall (X : nat -> C) (f : forall n, retr C (X n.+1) (X n))
+           Y (g : forall n, retr C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1),
+      sup (mono_proj_of_retr gP) = proj_top ->
+      sup (mono_proj_of_retr (down_comp_cone gP cont_f_val)) = proj_top
+}.
+Arguments ContFunctor {_ _} _ _.
+Arguments cont_f_val {_ _}.
+
+Lemma cont_f_val_inj C D : injective (@cont_f_val C D).
+Proof.
+case=> [F FP] [G GP] /= e.
+move: FP GP; rewrite -e=> FP GP.
+by rewrite (proof_irrelevance _ FP GP).
+Qed.
+
+Program Definition cont_functor_id (C : cpoCatType) : cont_functor C C :=
+  @ContFunctor C C 1 _.
+
+Next Obligation.
+by move=> /= C X f Y g gP <-; congr sup; apply/eq_mono.
+Qed.
+
+Program Definition cont_functor_comp
+  (C D E : cpoCatType)
+  (F : cont_functor D E) (G : cont_functor C D) :
+  cont_functor C E :=
+  ContFunctor (cont_f_val F ∘ cont_f_val G) _.
+
+Next Obligation.
+move=> C D E F G X f Y g gP e.
+rewrite -(cont_f_valP F (cont_f_valP G e)).
+by congr sup; apply/eq_mono.
+Qed.
+
+Lemma cont_functor_compP : Cat.axioms cont_functor_comp cont_functor_id.
+Proof.
+split.
+- by move=> C D F; apply/cont_f_val_inj=> /=; rewrite comp1f.
+- by move=> C D F; apply/cont_f_val_inj=> /=; rewrite compf1.
+- by move=> B C D E F G H; apply/cont_f_val_inj=> /=; rewrite compA.
+Qed.
+
+Definition cont_functor_catMixin := CatMixin cont_functor_compP.
+Canonical cont_functor_catType :=
+  Eval hnf in CatType cpoCatType cont_functor cont_functor_catMixin.
+
+Program Definition cont_functor_termCatMixin :=
+  @TermCatMixin
+    cpoCatType cont_functor (@term cpoCat_termCatType)
+    (fun X => @ContFunctor X _ (Functor (fun _ => tt) (fun A B f => 1) _ _) _) _.
+
+Next Obligation. by []. Qed.
+Next Obligation. by move=> *; rewrite compf1. Qed.
+Next Obligation.
+move=> C X f Y g gP _; rewrite -[RHS]sup_const.
+congr sup; apply/eq_mono=> /= x.
+by apply/val_inj=> /=; rewrite comp1f.
+Qed.
+Next Obligation.
+move=> C F; apply/cont_f_val_inj=> /=.
+apply/eq_functor=> /=.
+case: F=> [/= F _].
+case: F=> [/= Fobj Fmap _ _].
+move: Fmap; have {Fobj} -> : Fobj = fun x => tt.
+  by apply/functional_extensionality=> x; case: (Fobj _).
+move=> Fmap; congr Tagged.
+apply/functional_extensionality_dep=> X.
+apply/functional_extensionality_dep=> Y.
+apply/functional_extensionality=> f.
+by case: (Fmap X Y f)=> [[[] []] r]; apply/val_inj.
+Qed.
+
+(* FIXME: Coq gets confused because TermCatType infers the catType structure
+   using objects instead of arrows, and we have already declared the category of
+   cpo functors as canonical. *)
+
+Canonical cont_functor_termCatType :=
+  @TermCat.Pack cpoCatType cont_functor
+    (TermCat.Class cont_functor_catMixin cont_functor_termCatMixin).
+
+Program Definition cont_functor_prodCatMixin :=
+  @ProdCatMixin
+    cont_functor_catType prod_cat_cpoCatType
+    (fun C D E F G =>
+       ContFunctor
+         (Functor (fun X => (F X, G X))
+                  (fun X Y f =>
+                     Retr (((fmap F f).1, (fmap G f).1),
+                           ((fmap F f).2, (fmap G f).2))
+                          _)
+                  _ _)
+         _)
+    (fun C D => ContFunctor (fmap retr_cat_functor 'π1) _)
+    (fun C D => ContFunctor (fmap retr_cat_functor 'π2) _)
+    _.
+
+Next Obligation.
+move=> C D E F G X Y f; split; rewrite prod_cat_compE /= ?embK //.
+split; exact/retr1.
+Qed.
+
+Next Obligation.
+by move=> C D E F G X; apply/retr_retr_inj; rewrite /= !fmap1.
+Qed.
+
+Next Obligation.
+move=> C D E F G X Y Z f g; apply/retr_retr_inj; rewrite /=.
+by rewrite !fmapD !retrD.
+Qed.
+
+Next Obligation.
+move=> C D E F G X f Y g gP e.
+have /(congr1 proj_val) /= eF := cont_f_valP F e.
+have /(congr1 proj_val) /= eG := cont_f_valP G e.
+apply/val_inj=> /=.
+rewrite [in RHS]/cat_id /=; unfold prod_cat_id; rewrite -eF -eG.
+by congr (sup _, sup _); apply/eq_mono.
+Qed.
+
+Next Obligation.
+move=> C D X f Y g gP /(congr1 proj_val) /= [e1 e2].
+by apply/val_inj; rewrite /= -e1; congr sup; apply/eq_mono.
+Qed.
+
+Next Obligation.
+move=> C D X f Y g gP /(congr1 proj_val) /= [e1 e2].
+by apply/val_inj; rewrite /= -e2; congr sup; apply/eq_mono.
+Qed.
+
+Next Obligation.
+split.
+- move=> C D E F G; apply/cont_f_val_inj; rewrite /=.
+  apply/eq_functor; congr Tagged.
+  do 3![apply/functional_extensionality_dep=> ? /=].
+  exact/retr_retr_inj.
+- move=> C D E F G; apply/cont_f_val_inj; rewrite /=.
+  apply/eq_functor; congr Tagged.
+  do 3![apply/functional_extensionality_dep=> ? /=].
+  exact/retr_retr_inj.
+- move=> /= C D E [F FP] [G GP]
+            [/(congr1 cont_f_val)/eq_functor /= eF
+             /(congr1 cont_f_val)/eq_functor /= eG].
+  apply/cont_f_val_inj/eq_functor; rewrite /=.
+  case: F G eF eG {FP GP}=> [Fobj Fmap _ _] [Gobj Gmap _ _] /= eF eG.
+  have eobj : Fobj = Gobj.
+    apply/functional_extensionality=> X.
+    move: (congr1 tag eF) (congr1 tag eG)=> /=.
+    move=> /(congr1 (fun H => H X)) eobj1 /(congr1 (fun H => H X)) eobj2.
+    by case: (Fobj X) (Gobj X) eobj1 eobj2 => [??] [??] /= -> ->.
+  move: Gmap eF eG; rewrite -{}eobj=> {Gobj} Gmap e1 e2.
+  have := eq_tagged e1.
+  rewrite /= (proof_irrelevance _ (congr1 tag e1) erefl) /= => {e1} e1.
+  have := eq_tagged e2.
+  rewrite /= (proof_irrelevance _ (congr1 tag e2) erefl) /= => {e2} e2.
+  congr Tagged.
+  apply/functional_extensionality_dep=> X.
+  apply/functional_extensionality_dep=> Y.
+  apply/functional_extensionality_dep=> r.
+  move: e1 e2=> /(congr1 (fun H => val (H X Y r))) /= [e11 e12].
+  move=>        /(congr1 (fun H => val (H X Y r))) /= [e21 e22].
+  apply/retr_retr_inj.
+  by case: (Fmap X Y r).1 (Gmap X Y r).1 e11 e21=> [??] [??] /= -> ->.
+Qed.
+
+Canonical cont_functor_prodCatType :=
+  @ProdCat.Pack
+    cpoCatType cont_functor
+    (ProdCat.Class cont_functor_prodCatMixin).
+
+Canonical cont_functor_cartCatType :=
+  @CartCat.Pack
+    cpoCatType cont_functor
+    (CartCat.Class cont_functor_termCatMixin cont_functor_prodCatMixin).
 
 Section BiLimit.
 
@@ -4652,7 +4983,7 @@ rewrite (eq_irrelevance (leq_addr (n + m) n) (leq_trans (leq_addr m n) (leq_addl
 by rewrite downD retrD -compA embK compf1.
 Qed.
 
-Lemma proj_of_retr_in_bilim :
+Lemma proj_of_retr_bilim_rtuple :
   sup (mono_proj_of_retr rSP) = proj_of_retr bilim_rtuple.
 Proof.
 rewrite /bilim_rtuple; apply/val_inj=> /=.
@@ -4773,7 +5104,7 @@ Definition retr_roll : retr _ (F (Op mu, mu)) mu :=
 
 Lemma retr_rollP : proj_of_retr retr_roll = proj_top.
 Proof.
-rewrite /retr_roll -proj_of_retr_in_bilim.
+rewrite /retr_roll -proj_of_retr_bilim_rtuple.
 apply/val_inj=> /=; rewrite -[RHS](fmap1 F).
 rewrite (_ : cat_id (Op mu, mu) = (@proj_val pcpo_cpoCatType _ proj_top, proj_val proj_top)) //.
 rewrite -!sup_bilim_rproj -sup_pairf -[in LHS](sup_shift _ 1) -contP.
