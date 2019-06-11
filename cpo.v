@@ -1411,7 +1411,7 @@ Qed.
 
 Arguments functor_eval {_ _}.
 
-Lemma functor_ccCatAxioms@{} : CCCat.axioms_of@{j k} functor_curry (@functor_eval).
+Lemma functor_ccCatAxioms : CCCat.axioms_of@{j k} functor_curry (@functor_eval).
 Proof.
 split.
   move=> /= C D E F; apply/eq_functor=> /=; congr Tagged.
@@ -1445,7 +1445,7 @@ move=> /= C D E F; apply/eq_functor=> /=; apply: eq_Tagged=> /=.
   exact: proof_irrelevance.
 Qed.
 
-Definition cat_ccCatMixin@{} := CCCatMixin functor_ccCatAxioms.
+Definition cat_ccCatMixin := CCCatMixin functor_ccCatAxioms.
 Canonical cat_ccCatType : ccCatType@{j k} :=
   Eval hnf in CCCatType catType@{i j} functor@{i j} cat_ccCatMixin.
 
@@ -3917,7 +3917,7 @@ case=> /= [T1 T2] [S1 S2] [R1 R2]; apply/continuous2P; split=> /=.
 Qed.
 
 Canonical prod_cat_cpoCatType :=
-  Eval hnf in CpoCatType (C * D) (prod_cat_hom C D) prod_cat_cpoCatMixin.
+  Eval hnf in CpoCatType (C * D) (@prod_cat_hom C D) prod_cat_cpoCatMixin.
 
 End ProdCpoCat.
 
@@ -3973,7 +3973,7 @@ End CpoFunctor.
 Definition cpo_functor_of (C D : cpoCatType) (p : phant (C -> D)) :=
   cpo_functor C D.
 
-Notation "{ 'cpo_functor' T }" := (cpo_functor_of _ _ (Phant T))
+Notation "{ 'cpo_functor' T }" := (@cpo_functor_of _ _ (Phant T))
   (at level 0, format "{ 'cpo_functor'  T }") : type_scope.
 
 Arguments CpoFunctor {_ _} _ _ _.
@@ -4296,8 +4296,7 @@ exact: val_inj.
 Qed.
 
 Program Definition retr_prod (C D : cpoCatType) :
-  iso _
-      (retr_catType (C × D))
+  iso (retr_catType (C × D))
       (retr_catType C × retr_catType D) :=
   @Iso _ _ _
        (Functor id (fun X Y f => (Retr (f.1.1, f.2.1) _, Retr (f.1.2, f.2.2) _)) _ _)
@@ -4351,8 +4350,7 @@ congr pair; by apply/retr_retr_inj.
 Qed.
 
 Program Definition retr_op (C : cpoCatType) :
-  iso _
-      (retr_catType C)
+  iso (retr_catType C)
       (retr_catType (op_cpoCatType C)) :=
   @Iso _ _ _
     (Functor id (fun X Y f => Retr (f.2, f.1) _) _ _)
@@ -4496,7 +4494,7 @@ Next Obligation. by split; [reflexivity|rewrite comp1f]. Qed.
 Lemma proj_topP p : p ⊑ proj_top.
 Proof. by split; rewrite ?comp1f ?compf1. Qed.
 
-Program Definition proj_of_retr (S : C) (r : retr C T S) : proj :=
+Program Definition proj_of_retr (S : C) (r : retr T S) : proj :=
   @Proj (r.2 ∘ r.1) _.
 
 Next Obligation.
@@ -4504,7 +4502,7 @@ move=> S r; split; first exact: retr1.
 by rewrite compA -(compA r.2) (embK r) compf1.
 Qed.
 
-Lemma proj_of_retr_comp (S R : C) (r1 : retr C S R) r2 :
+Lemma proj_of_retr_comp (S R : C) (r1 : retr S R) r2 :
   proj_of_retr (r1 ∘ r2) ⊑ proj_of_retr r2.
 Proof.
 split=> /=.
@@ -4514,8 +4512,8 @@ Qed.
 
 Program Definition mono_proj_of_retr
   (S : nat -> C)
-  (rS : forall n, retr C (S n.+1) (S n))
-  (rT : forall n, retr C T (S n))
+  (rS : forall n, retr (S n.+1) (S n))
+  (rT : forall n, retr T (S n))
   (rP : forall n, rT n = rS n ∘ rT n.+1) : chain proj :=
   Mono (fun n => proj_of_retr (rT n)) _.
 
@@ -4582,7 +4580,7 @@ Arguments proj_top {_ _}.
 
 Definition cone_proj_of_retr
   (C : cpoCatType) (X : {functor op nat -> retr_catType C}) (Y : cone X) :
-  chain (proj C (cone_tip Y)) :=
+  chain (proj (cone_tip Y)) :=
   @mono_proj_of_retr
     C (cone_tip Y) X
     (fun n => fmap X (leqnSn n))
@@ -4593,7 +4591,7 @@ Section PointedProj.
 
 Variable T : pcpoType.
 
-Program Definition proj_bot : proj pcpo_cpoCatType T := Proj _ (@cont_const T T ⊥) _.
+Program Definition proj_bot : @proj pcpo_cpoCatType T := Proj _ (@cont_const T T ⊥) _.
 Next Obligation. split; [exact/botP|exact/eq_cont]. Qed.
 
 Lemma proj_botP p : proj_bot ⊑ p.
@@ -4605,16 +4603,16 @@ exact: (proj1 (projP p)).
 Qed.
 
 Definition proj_ppoMixin := PpoMixin proj_botP.
-Canonical proj_ppoType := Eval hnf in PpoType (proj pcpo_cpoCatType T) proj_ppoMixin.
-Canonical proj_pcpoType := Eval hnf in PcpoType (proj pcpo_cpoCatType T).
+Canonical proj_ppoType := Eval hnf in PpoType (@proj pcpo_cpoCatType T) proj_ppoMixin.
+Canonical proj_pcpoType := Eval hnf in PcpoType (@proj pcpo_cpoCatType T).
 
 End PointedProj.
 
 Record cont_functor (C D : cpoCatType) := ContFunctor {
   cont_f_val  :> {functor retr_catType C -> retr_catType D};
   cont_f_valP :
-    forall (X : nat -> C) (f : forall n, retr C (X n.+1) (X n))
-           Y (g : forall n, retr C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1),
+    forall (X : nat -> C) (f : forall n, @retr C (X n.+1) (X n))
+           Y (g : forall n, @retr C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1),
       sup (mono_proj_of_retr gP) = proj_top ->
       sup (mono_proj_of_retr (down_comp_cone gP cont_f_val)) = proj_top
 }.
@@ -4825,7 +4823,7 @@ Qed.
 Section BiLimit.
 
 Variable T : nat -> pcpoType.
-Variable r : forall n, retr _ (T n.+1) (T n).
+Variable r : forall n, retr (T n.+1) (T n).
 
 Record bilim := Bilim {
   bilim_val : dfun T;
@@ -4916,7 +4914,7 @@ move=> e; apply/eq_cont=> x; apply/eq_bilim=> n.
 by move/(_ n)/eq_cont/(_ x): e=> /= ->.
 Qed.
 
-Program Definition bilim_rproj n : retr pcpo_cpoCatType bilim_pcpoType (T n) :=
+Program Definition bilim_rproj n : @retr pcpo_cpoCatType bilim_pcpoType (T n) :=
   Retr (bilim_proj n,
         @bilim_tuple _ (fun m => (down r (leq_addr n m)).1 ∘
                                  (down r (leq_addl m n)).2) _) _.
@@ -4963,10 +4961,10 @@ Qed.
 Section Universal.
 
 Variable S : pcpoType.
-Variable rS : forall n, retr _ S (T n).
+Variable rS : forall n, retr S (T n).
 Hypothesis rSP : forall n, rS n = r n ∘ rS n.+1.
 
-Program Definition bilim_rtuple : retr _ S bilim_pcpoType :=
+Program Definition bilim_rtuple : retr S bilim_pcpoType :=
   Retr (sup (Mono (fun n => (bilim_rproj n).2 ∘ (rS n).1) _),
         sup (Mono (fun n => (rS n).2 ∘ (bilim_rproj n).1) _)) _.
 
@@ -4993,7 +4991,7 @@ split; rewrite continuous_cpo_comp.
 - move: (congr1 proj_val sup_bilim_rproj)=> /= <-.
   congr sup; apply/eq_mono=> n /=; unfold compp; rewrite /=.
   by rewrite compA -(compA _ (rS n).1) embK compf1.
-- set c := mono_cpo_compp _ _ _ _ ∘ _.
+- set c := mono_cpo_compp _ _ _ ∘ _.
   have [_ least] := supP c; apply: least=> n.
   rewrite /c /=; unfold compp=> /=.
   rewrite compA -(compA _ (bilim_proj n)) bilim_tupleK.
@@ -5078,10 +5076,10 @@ split.
 - by move=> x; rewrite /= /constfun /=; apply: botP.
 Qed.
 
-Definition chain_mor0 : retr _ 'X_1 'X_0 :=
+Definition chain_mor0 : retr 'X_1 'X_0 :=
   Sub chain_mor0_def chain_mor0_proof.
 
-Lemma f_retr_proof (T S : pcpoType) (f : retr _ T S) :
+Lemma f_retr_proof (T S : pcpoType) (f : retr T S) :
   retraction (fmap F (f.2, f.1)) (fmap F (f.1, f.2)).
 Proof.
 split; rewrite -fmapD prod_cat_compE /=.
@@ -5091,22 +5089,22 @@ change 1 with (@cat_id pcpo_cpoCatType (F (T, T))).
 rewrite -fmap1; apply: (cpo_monotone_fmap F); split; exact: (proj2 (retrP f)).
 Qed.
 
-Definition f_retr (T S : pcpoType) (f : retr _ T S) : retr _ (F (Op T, T)) (F (Op S, S)) :=
+Definition f_retr (T S : pcpoType) (f : retr T S) : retr (F (Op T, T)) (F (Op S, S)) :=
   Sub (fmap F (f.2, f.1), fmap F (f.1, f.2))
       (@f_retr_proof T S f).
 
 Lemma f_retr1 (T : pcpoType) :
-  f_retr 1 = 1 :> retr _ (F (Op T, T)) (F (Op T, T)).
+  f_retr 1 = 1 :> retr (F (Op T, T)) (F (Op T, T)).
 Proof. by apply/retr_retr_inj/eq_cont=> x; rewrite /= fmap1. Qed.
 
-Lemma f_retrD (T S R : pcpoType) (f : retr _ S R) (g : retr _ T S) :
+Lemma f_retrD (T S R : pcpoType) (f : retr S R) (g : retr T S) :
   f_retr (f ∘ g) = f_retr f ∘ f_retr g.
 Proof.
 apply: retr_retr_inj; unfold comp, f_retr; simpl.
 by rewrite fmapD.
 Qed.
 
-Fixpoint chain_mor n : retr _ 'X_n.+1 'X_n :=
+Fixpoint chain_mor n : retr 'X_n.+1 'X_n :=
   match n with
   | 0    => chain_mor0
   | n.+1 => f_retr (chain_mor n)
@@ -5118,8 +5116,8 @@ Lemma chain_mor_outlim n :
   bilim_rproj chain_mor n = chain_mor n ∘ bilim_rproj chain_mor n.+1.
 Proof. by case: n=> [|n] /=; rewrite [LHS]bilim_rproj_cone. Qed.
 
-Definition roll_aux n : retr _ (F (Op mu, mu)) 'X_n :=
-  match n return retr _ (F (Op mu, mu)) 'X_n with
+Definition roll_aux n : retr (F (Op mu, mu)) 'X_n :=
+  match n return retr (F (Op mu, mu)) 'X_n with
   | 0    => chain_mor 0 ∘ f_retr (bilim_rproj chain_mor 0)
   | n.+1 => f_retr (bilim_rproj chain_mor n)
   end.
@@ -5130,7 +5128,7 @@ case: n=> [|n] /=; first by apply/retr_retr_inj/eq_cont=> x /=.
 by rewrite chain_mor_outlim f_retrD.
 Qed.
 
-Definition retr_roll : retr _ (F (Op mu, mu)) mu :=
+Definition retr_roll : retr (F (Op mu, mu)) mu :=
   bilim_rtuple roll_aux_cone.
 
 Lemma retr_rollP : proj_of_retr retr_roll = proj_top.
