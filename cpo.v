@@ -586,7 +586,7 @@ End Functor.
 
 Arguments fmap {_ _} _ {_ _}.
 Arguments Functor {_ _} _ _ _ _.
-Notation "{ 'functor' T }" := (functor_of _ _ (Phant T))
+Notation "{ 'functor' T }" := (@functor_of _ _ (Phant T))
   (at level 0, format "{ 'functor'  T }") : type_scope.
 Arguments NatTrans {_ _ _ _} _ _.
 
@@ -1124,7 +1124,7 @@ Variable C : catType@{i j}.
 
 Definition hom_fobj (X : prod@{j} C^op C) : Type@{i} := C X.1 X.2.
 Definition hom_fmap (X Y : prod@{j} C^op C)
-                    (f : hom _ X Y) :
+                    (f : hom X Y) :
   sfun (hom_fobj X) (hom_fobj Y) :=
   fun g => f.2 ∘ g ∘ f.1.
 Lemma hom_fmap1 (X : prod@{j} C^op C) :
@@ -1134,7 +1134,7 @@ apply/functional_extensionality=> f; rewrite /hom_fmap /=.
 by rewrite comp1f compf1.
 Qed.
 Lemma hom_fmapD (X Y Z : prod@{j} C^op C)
-  (f : prod_cat_catType@{i j} C^op C Y Z) (g : hom _ X Y) :
+  (f : prod_cat_catType@{i j} C^op C Y Z) (g : hom X Y) :
   hom_fmap (comp@{i j} f g) = comp@{i j} (hom_fmap f) (hom_fmap g).
 Proof.
 apply/functional_extensionality=> x; rewrite /hom_fmap /= !fun_compE /=.
@@ -1326,7 +1326,7 @@ by rewrite -[in RHS]compA pairKL pairKR compA.
 Qed.
 
 Definition exp_fobj (X : C^op * C) := X.1 ⇒ X.2.
-Definition exp_fmap (X Y : C^op * C) (f : hom _ X Y) :
+Definition exp_fmap (X Y : C^op * C) (f : hom X Y) :
   C (exp_fobj X) (exp_fobj Y) :=
   λ (f.2 ∘ eval ∘ ⟨'π1, of_op f.1 ∘ 'π2⟩).
 Lemma exp_fmap1 (X : C^op * C) :
@@ -1334,7 +1334,7 @@ Lemma exp_fmap1 (X : C^op * C) :
 Proof.
 by rewrite /exp_fmap /= !comp1f -(comp1f 'π1) -{2}(uncurryK 1).
 Qed.
-Lemma exp_fmapD (X Y Z : C^op * C) (g : Cat.hom _ Y Z) (f : Cat.hom _ X Y) :
+Lemma exp_fmapD (X Y Z : C^op * C) (g : Cat.hom Y Z) (f : Cat.hom X Y) :
   exp_fmap (g ∘ f) = exp_fmap g ∘ exp_fmap f.
 Proof.
 rewrite /exp_fmap /= comp_curry -!(compA g.2); congr (λ (g.2 ∘ _)).
