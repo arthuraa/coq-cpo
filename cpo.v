@@ -180,9 +180,9 @@ Set Polymorphic Inductive Cumulativity.
 Unset Universe Minimization ToSet.
 
 Definition dfun T (S : T -> Type) := forall x, S x.
-Polymorphic Definition sfun@{i} (T S : Type@{i}) : Type@{i} := T -> S.
+Definition sfun@{i} (T S : Type@{i}) : Type@{i} := T -> S.
 
-Polymorphic Definition flip@{i} (T S : Type@{i}) (R : T -> S -> Type@{i})
+Definition flip@{i} (T S : Type@{i}) (R : T -> S -> Type@{i})
   (f : forall x y, R x y) y x := f x y.
 
 Identity Coercion fun_of_dfun : dfun >-> Funclass.
@@ -1045,14 +1045,17 @@ Definition prod_fobj (X : C * C) := X.1 × X.2.
 Definition prod_fmap (X Y : C * C) f : C (prod_fobj X) (prod_fobj Y) :=
   ⟨f.1 ∘ 'π1, f.2 ∘ 'π2⟩.
 
+Lemma prod_fmapD1 (X Y Z : C * C) (f : prod_cat_hom Y Z) (g : prod_cat_hom X Y) :
+  prod_fmap (f ∘ g) = prod_fmap f ∘ prod_fmap g.
+Proof.
+case: X Y Z f g=> [X1 Y1] [X2 Y2] [X3 Y3] [/= f1 g1] [/= f2 g2] /=.
+by rewrite comp_pair -![in RHS]compA@{i j} pairKL pairKR !compA@{i j}.
+Qed.
+
 Program Definition prod_functor :=
-  @Functor _ _ prod_fobj prod_fmap _ _.
+  @Functor _ _ prod_fobj prod_fmap _ (@prod_fmapD1).
 
 Next Obligation. by move=> [X Y]; rewrite /prod_fmap /= !comp1f projK. Qed.
-Next Obligation.
-move=> [X1 Y1] [X2 Y2] [X3 Y3] [/= f1 g1] [/= f2 g2]; rewrite /prod_fmap /=.
-by rewrite comp_pair -![in RHS]compA pairKL pairKR !compA.
-Qed.
 
 End ProdCatTheory.
 
