@@ -15,6 +15,53 @@ Notation funE  := functional_extensionality.
 Notation PropE := propositional_extensionality.
 Notation PropI := proof_irrelevance.
 
+Definition cast (T S : Type) (e : T = S) : T -> S :=
+  match e with erefl => id end.
+
+Arguments cast {_ _} e _.
+
+Notation "e1 ∘ e2" := (etrans e1 e2)
+  (at level 40, left associativity) : eq_scope.
+Notation "e ^-1" := (esym e) : eq_scope.
+
+Local Open Scope eq_scope.
+
+(* We redefine some constants of the standard library here to avoid problems
+   with universe inconsistency and opacity. *)
+
+Definition congr1 T S (f : T -> S) x y (e : x = y) : f x = f y :=
+  match e with erefl => erefl end.
+
+Notation "f @@ e" := (congr1 f e) (at level 50) : eq_scope.
+
+Definition congr1V T S (f : T -> S) x y (e : x = y) : (f @@ e)^-1 = f @@ e^-1 :=
+  match e with erefl => erefl end.
+
+Definition congr1CE (T S : Type) (a : S) x y (e : x = y) :
+  (λ _ : T, a) @@ e = erefl :=
+  match e with erefl => erefl end.
+
+Definition etransV T (x y z : T) (p : x = y) (q : y = z) : (p ∘ q)^-1 = q^-1 ∘ p^-1 :=
+  match p in _ = y return forall q : y = z, (p ∘ q)^-1 = q^-1 ∘ p^-1 with
+  | erefl => fun q => match q with erefl => erefl end
+  end q.
+
+Definition etrans1p T (x y : T) (p : x = y) : erefl ∘ p = p :=
+  match p with erefl => erefl end.
+
+Definition etransVp T (x y : T) (p : x = y) : p^-1 ∘ p = erefl :=
+  match p with erefl => erefl end.
+
+Definition etranspV T (x y : T) (p : x = y) : p ∘ p^-1 = erefl :=
+  match p with erefl => erefl end.
+
+Definition congr2 T1 T2 S (f : T1 -> T2 -> S) x1 y1 x2 y2 (e1 : x1 = y1) (e2 : x2 = y2) : f x1 x2 = f y1 y2 :=
+  congr1 (f x1) e2 ∘ congr1 (fun a => f a y2) e1.
+
+Definition castD T S R (p : T = S) (q : S = R) :
+  forall a, cast (p ∘ q) a = cast q (cast p a) :=
+  match q with erefl => fun a => erefl end.
+
 Notation "∃! x , P" := (exists! x, P) (at level 200).
 
 Set Primitive Projections.
@@ -61,27 +108,55 @@ Section Quotient.
 
 Universe i.
 
-Context (T : Type@{i}) (R : relation T) `{E : Equivalence _ R}.
+Context (T : Type@{i}).
 
-Definition quot : Type@{i} := {P : T → Prop | ∃x, P = R x}.
+Record equiv : Type@{i} := Equiv {
+  equiv_rel :> T → T → Prop;
+  _         :  ∀ x, equiv_rel x x;
+  _         :  ∀ x y, equiv_rel x y → equiv_rel y x;
+  _         :  ∀ x y z, equiv_rel x y → equiv_rel y z → equiv_rel x z;
+}.
 
-Definition Quot (x : T) : quot := Sig _ (R x) (ex_intro _ x erefl).
+Context (R : equiv).
+
+Global Instance equivP : Equivalence R.
+Proof. by case: R. Qed.
+
+Unset Elimination Schemes.
+Record quot : Type@{i} := Quot_ {of_quot : {P : T → Prop | ∃x, P = R x}}.
+Set Elimination Schemes.
+
+Definition Quot (x : T) : quot := Quot_ (Sig _ (R x) (ex_intro _ x erefl)).
 
 Lemma QuotE x y : R x y -> Quot x = Quot y.
 Proof.
-move=> e; apply: val_inj; apply: funE=> z; apply: PropE.
+move=> e; congr Quot_; apply: val_inj; apply: funE=> z; apply: PropE.
 by rewrite /= e.
 Qed.
 
-Section Elim.
+Lemma Quot_inj x y : Quot x = Quot y -> R x y.
+Proof.
+move=> e; rewrite -[R x y]/(val (of_quot (Quot x)) y) e //=; reflexivity.
+Qed.
+
+Variant quot_spec : quot -> Prop :=
+| QuotSpec x : quot_spec (Quot x).
+
+Lemma quotP q : quot_spec q.
+Proof.
+suff [x ->]: ∃ x, q = Quot x by exists.
+by case: q=> [[P [x xP]]]; exists x; congr Quot_; apply: val_inj.
+Qed.
+
+Section Rec.
 
 Context S (f : T → S) (fP : ∀ x y, R x y → f x = f y).
 
-Lemma quot_rec_subproof (q : quot) : ∃! a, ∃ x, val q x ∧ a = f x.
+Lemma quot_rec_subproof (q : quot) : ∃! a, ∃ x, val (of_quot q) x ∧ a = f x.
 Proof.
-case: q=> _ /= [x ->]; exists (f x); split=> [|a].
+case: q=> [[_ /= [x ->]]]; exists (f x); split=> [|a].
   exists x; split; auto; reflexivity.
-by case=> x' [x'P ->]; apply: fP.
+by case=> y [yP ->]; apply: fP.
 Qed.
 
 Definition quot_rec (q : quot) :=
@@ -89,19 +164,45 @@ Definition quot_rec (q : quot) :=
 
 Lemma quot_recE x : quot_rec (Quot x) = f x.
 Proof.
-rewrite /quot_rec; case: uchoice=> a [/= x' [x'P ->]].
+rewrite /quot_rec; case: uchoice=> _ [/= y [yP ->]].
 by symmetry; apply: fP.
 Qed.
 
-Lemma quotP g : (∀ x, g (Quot x) = f x) -> g = quot_rec.
+Lemma quotU g : (∀ x, g (Quot x) = f x) -> g = quot_rec.
 Proof.
 rewrite /quot_rec=> gP; apply: funE => q.
 case: uchoice=> _ [x [/= xP ->]]; rewrite -gP; congr g.
-apply: val_inj; apply: funE=> x'.
-case: q xP=> /= _ [/= x'' ->] e.
-apply: PropE; by rewrite e.
+case: q xP => q xP /=; congr Quot_.
+apply: val_inj; apply: funE=> y.
+case: q xP=> /= _ [/= z ->] ezx; apply: PropE; by rewrite ezx.
+Qed.
+
+End Rec.
+
+Section Elim.
+
+Context (S : quot → Type) (f : ∀ x, S (Quot x)).
+Context (fP : ∀ x y (exy : R x y), cast (S @@ QuotE exy) (f x) = f y).
+
+Lemma quot_rect_subproof (q : quot) :
+  ∃! a, ∃ x (exq : Quot x = q), a = cast (S @@ exq) (f x).
+Proof.
+case: q / quotP => x; exists (f x); split=> [|a].
+  by exists x, erefl.
+case=> y [eyx -> {a}].
+by rewrite (PropI _ eyx (QuotE (Quot_inj eyx))) fP.
+Qed.
+
+Definition quot_rect q := val (uchoice (quot_rect_subproof q)).
+
+Lemma quot_rectE x : quot_rect (Quot x) = f x.
+Proof.
+rewrite /quot_rect; case: uchoice=> _ [y [eyx /= ->]].
+by rewrite (PropI _ eyx (QuotE (Quot_inj eyx))) fP.
 Qed.
 
 End Elim.
+
+Definition quot_ind (P : quot → Prop) := @quot_rect P.
 
 End Quotient.
