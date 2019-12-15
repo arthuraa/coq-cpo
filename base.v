@@ -11,7 +11,7 @@ Unset Printing Implicit Defensive.
 Set Universe Polymorphism.
 
 Notation dfunE := functional_extensionality_dep.
-Notation funE  := functional_extensionality.
+Notation  funE := functional_extensionality.
 Notation PropE := propositional_extensionality.
 Notation PropI := proof_irrelevance.
 
@@ -32,7 +32,7 @@ Local Open Scope eq_scope.
 Definition congr1 T S (f : T -> S) x y (e : x = y) : f x = f y :=
   match e with erefl => erefl end.
 
-Notation "f @@ e" := (congr1 f e) (at level 50) : eq_scope.
+Notation "f @@ e" := (congr1 f e) (at level 20) : eq_scope.
 
 Definition congr1V T S (f : T -> S) x y (e : x = y) : (f @@ e)^-1 = f @@ e^-1 :=
   match e with erefl => erefl end.
@@ -139,46 +139,6 @@ Proof.
 move=> e; rewrite -[R x y]/(val (of_quot (Quot x)) y) e //=; reflexivity.
 Qed.
 
-Variant quot_spec : quot -> Prop :=
-| QuotSpec x : quot_spec (Quot x).
-
-Lemma quotP q : quot_spec q.
-Proof.
-suff [x ->]: ∃ x, q = Quot x by exists.
-by case: q=> [[P [x xP]]]; exists x; congr Quot_; apply: val_inj.
-Qed.
-
-Section Rec.
-
-Context S (f : T → S) (fP : ∀ x y, R x y → f x = f y).
-
-Lemma quot_rec_subproof (q : quot) : ∃! a, ∃ x, val (of_quot q) x ∧ a = f x.
-Proof.
-case: q=> [[_ /= [x ->]]]; exists (f x); split=> [|a].
-  exists x; split; auto; reflexivity.
-by case=> y [yP ->]; apply: fP.
-Qed.
-
-Definition quot_rec (q : quot) :=
-  val (uchoice (quot_rec_subproof q)).
-
-Lemma quot_recE x : quot_rec (Quot x) = f x.
-Proof.
-rewrite /quot_rec; case: uchoice=> _ [/= y [yP ->]].
-by symmetry; apply: fP.
-Qed.
-
-Lemma quotU g : (∀ x, g (Quot x) = f x) -> g = quot_rec.
-Proof.
-rewrite /quot_rec=> gP; apply: funE => q.
-case: uchoice=> _ [x [/= xP ->]]; rewrite -gP; congr g.
-case: q xP => q xP /=; congr Quot_.
-apply: val_inj; apply: funE=> y.
-case: q xP=> /= _ [/= z ->] ezx; apply: PropE; by rewrite ezx.
-Qed.
-
-End Rec.
-
 Section Elim.
 
 Context (S : quot → Type) (f : ∀ x, S (Quot x)).
@@ -187,8 +147,9 @@ Context (fP : ∀ x y (exy : R x y), cast (S @@ QuotE exy) (f x) = f y).
 Lemma quot_rect_subproof (q : quot) :
   ∃! a, ∃ x (exq : Quot x = q), a = cast (S @@ exq) (f x).
 Proof.
-case: q / quotP => x; exists (f x); split=> [|a].
-  by exists x, erefl.
+have {q} [x ->]: ∃x, q = Quot x.
+  by case: q=> [[P [x xP]]]; exists x; congr Quot_; apply: val_inj.
+exists (f x); split=> [|a]; first by exists x, erefl.
 case=> y [eyx -> {a}].
 by rewrite (PropI _ eyx (QuotE (Quot_inj eyx))) fP.
 Qed.
@@ -204,5 +165,18 @@ Qed.
 End Elim.
 
 Definition quot_ind (P : quot → Prop) := @quot_rect P.
+
+Section Rec.
+
+Context S (f : T → S) (fP : ∀ x y, R x y → f x = f y).
+
+Definition quot_rec :=
+  @quot_rect (λ _, S) f
+    (λ x y exy, (λ p, cast p (f x)) @@ congr1CE S (QuotE exy) ∘ fP exy).
+
+Lemma quot_recE x : quot_rec (Quot x) = f x.
+Proof. by rewrite /quot_rec quot_rectE. Qed.
+
+End Rec.
 
 End Quotient.
