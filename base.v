@@ -19,12 +19,12 @@ Declare Scope cast_scope.
 Delimit Scope cast_scope with CAST.
 Local Open Scope cast_scope.
 
-Definition cast (T S : Type) (e : T = S) : T -> S :=
+Definition cast@{u} (T S : Type@{u}) (e : T = S) : T -> S :=
   match e with erefl => id end.
 
 Arguments cast {_ _} e _.
 
-Notation "e1 ∘ e2" := (etrans e1 e2)
+Notation "e1 * e2" := (etrans e1 e2)
   (at level 40, left associativity) : cast_scope.
 Notation "e ^-1" := (esym e) : cast_scope.
 
@@ -43,25 +43,25 @@ Definition congr1CE (T S : Type) (a : S) x y (e : x = y) :
   (λ _ : T, a) @@ e = erefl :=
   match e with erefl => erefl end.
 
-Definition etransV T (x y z : T) (p : x = y) (q : y = z) : (p ∘ q)^-1 = q^-1 ∘ p^-1 :=
-  match p in _ = y return forall q : y = z, (p ∘ q)^-1 = q^-1 ∘ p^-1 with
+Definition etransV T (x y z : T) (p : x = y) (q : y = z) : (p * q)^-1 = q^-1 * p^-1 :=
+  match p in _ = y return forall q : y = z, (p * q)^-1 = q^-1 * p^-1 with
   | erefl => fun q => match q with erefl => erefl end
   end q.
 
-Definition etrans1p T (x y : T) (p : x = y) : erefl ∘ p = p :=
+Definition etrans1p T (x y : T) (p : x = y) : erefl * p = p :=
   match p with erefl => erefl end.
 
-Definition etransVp T (x y : T) (p : x = y) : p^-1 ∘ p = erefl :=
+Definition etransVp T (x y : T) (p : x = y) : p^-1 * p = erefl :=
   match p with erefl => erefl end.
 
-Definition etranspV T (x y : T) (p : x = y) : p ∘ p^-1 = erefl :=
+Definition etranspV T (x y : T) (p : x = y) : p * p^-1 = erefl :=
   match p with erefl => erefl end.
 
 Definition congr2 T1 T2 S (f : T1 -> T2 -> S) x1 y1 x2 y2 (e1 : x1 = y1) (e2 : x2 = y2) : f x1 x2 = f y1 y2 :=
-  congr1 (f x1) e2 ∘ congr1 (fun a => f a y2) e1.
+  congr1 (f x1) e2 * congr1 (fun a => f a y2) e1.
 
 Definition castD T S R (p : T = S) (q : S = R) :
-  forall a, cast (p ∘ q) a = cast q (cast p a) :=
+  forall a, cast (p * q) a = cast q (cast p a) :=
   match q with erefl => fun a => erefl end.
 
 Notation "∃! x , P" := (exists! x, P) (at level 200).
@@ -174,7 +174,7 @@ Context S (f : T → S) (fP : ∀ x y, R x y → f x = f y).
 
 Definition quot_rec :=
   @quot_rect (λ _, S) f
-    (λ x y exy, (λ p, cast p (f x)) @@ congr1CE S (QuotE exy) ∘ fP exy).
+    (λ x y exy, (λ p, cast p (f x)) @@ congr1CE S (QuotE exy) * fP exy).
 
 Lemma quot_recE x : quot_rec (Quot x) = f x.
 Proof. by rewrite /quot_rec quot_rectE. Qed.
