@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
 Require Import Coq.Logic.PropExtensionality.
 Require Import Coq.Logic.FunctionalExtensionality.
 Require Import Coq.Relations.Relation_Definitions.
@@ -15,16 +15,18 @@ Notation  funE := functional_extensionality.
 Notation PropE := propositional_extensionality.
 Notation PropI := proof_irrelevance.
 
+Declare Scope cast_scope.
+Delimit Scope cast_scope with CAST.
+Local Open Scope cast_scope.
+
 Definition cast (T S : Type) (e : T = S) : T -> S :=
   match e with erefl => id end.
 
 Arguments cast {_ _} e _.
 
 Notation "e1 ∘ e2" := (etrans e1 e2)
-  (at level 40, left associativity) : eq_scope.
-Notation "e ^-1" := (esym e) : eq_scope.
-
-Local Open Scope eq_scope.
+  (at level 40, left associativity) : cast_scope.
+Notation "e ^-1" := (esym e) : cast_scope.
 
 (* We redefine some constants of the standard library here to avoid problems
    with universe inconsistency and opacity. *)
@@ -32,7 +34,7 @@ Local Open Scope eq_scope.
 Definition congr1 T S (f : T -> S) x y (e : x = y) : f x = f y :=
   match e with erefl => erefl end.
 
-Notation "f @@ e" := (congr1 f e) (at level 20) : eq_scope.
+Notation "f @@ e" := (congr1 f e) (at level 20) : cast_scope.
 
 Definition congr1V T S (f : T -> S) x y (e : x = y) : (f @@ e)^-1 = f @@ e^-1 :=
   match e with erefl => erefl end.
