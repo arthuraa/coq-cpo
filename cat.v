@@ -127,6 +127,12 @@ Qed.
 Definition inverse X Y (f : C X Y) (fP : has_inverse f) : C Y X :=
   val (uchoice (inverse_def fP)).
 
+Lemma inverseK X Y (f : C X Y) (fP : has_inverse f) : inverse fP ∘ f = 1.
+Proof. by rewrite /inverse; case: uchoice=> /= g []. Qed.
+
+Lemma inverseKV X Y (f : C X Y) (fP : has_inverse f) : f ∘ inverse fP = 1.
+Proof. by rewrite /inverse; case: uchoice=> /= g []. Qed.
+
 Record iso X Y := Iso {
   iso1  : C X Y;
   iso2  : C Y X;
@@ -197,6 +203,9 @@ Lemma op_compE X Y Z (f : op_hom C Y Z) (g : op_hom C X Y) :
   f ∘ g = of_op g ∘ of_op f.
 Proof. by []. Qed.
 
+Lemma op_idE (X : C) : @cat_id op_catType X = cat_id X.
+Proof. by []. Qed.
+
 End Opposite.
 
 Notation "C '^op'" := (op_catType C)
@@ -219,6 +228,17 @@ Canonical Sets@{} := CatType Type@{u} _ sfun_catMixin.
 
 Lemma SetsE X Y Z (f : Sets Y Z) (g : Sets X Y) (x : X) : (f ∘ g) x = f (g x).
 Proof. by []. Qed.
+
+Lemma Sets1 (X : Sets) (x : X) : cat_id X x = x.
+Proof. by []. Qed.
+
+Lemma Sets_has_inverse X Y (f : Sets X Y) :
+  (∀ y, ∃! x, f x = y) → has_inverse f.
+Proof.
+move=> fP; exists (λ y, val (uchoice (fP y))); split; apply/funE.
+  by move=> y; rewrite SetsE Sets1; case: uchoice.
+by move=> x; rewrite SetsE Sets1 (uchoiceE (fP (f x)) erefl).
+Qed.
 
 End Sets.
 
@@ -255,14 +275,22 @@ Qed.
 
 Implicit Types F G H : functor.
 
-Variant nat_trans@{} F G : Type@{u} := NatTrans of
-  {η : ∀ X, D (F X) (G X) |
-   ∀ X Y (f : C X Y), fmap G f ∘ η X = η Y ∘ fmap F f}.
+Record nat_trans@{} F G : Type@{u} := NatTrans {
+  of_nat_trans :
+    {η : ∀ X, D (F X) (G X) |
+     ∀ X Y (f : C X Y), fmap G f ∘ η X = η Y ∘ fmap F f}
+}.
+
+Coercion of_nat_trans : nat_trans >-> sub.
 
 Definition fun_of_nat_trans (F G : functor) (η : nat_trans F G) :=
   let: NatTrans η := η in val η.
 
 Coercion fun_of_nat_trans : nat_trans >-> Funclass.
+
+Lemma nat_transP F G (η : nat_trans F G) X Y (f : C X Y) :
+  fmap G f ∘ η X = η Y ∘ fmap F f.
+Proof. case: η=> η; exact: (valP η X Y f). Qed.
 
 Lemma eq_nat_trans F G (η ε : nat_trans F G) : (forall X, η X = ε X) ↔ η = ε.
 Proof.
@@ -273,7 +301,7 @@ Qed.
 
 Program Definition nat_trans_comp@{} F G H
   (η : nat_trans G H) (ε : nat_trans F G) : nat_trans F H :=
-  NatTrans (Sig _ (fun X => η X ∘ ε X) _).
+  NatTrans (Sub _ (fun X => η X ∘ ε X) _).
 
 Next Obligation.
 move=> F G H [η] [ε] X Y f.
@@ -281,7 +309,7 @@ by rewrite compA (valP η) -compA (valP ε) compA.
 Qed.
 
 Program Definition nat_trans_id@{} F : nat_trans F F :=
-  NatTrans (Sig _ (fun X => 1) _).
+  NatTrans (Sub _ (fun X => 1) _).
 
 Next Obligation. by move=> F X Y f /=; rewrite comp1f compf1. Qed.
 
@@ -296,6 +324,31 @@ Qed.
 Definition functor_catMixin@{} := CatMixin nat_trans_compP@{}.
 Canonical Fun@{} :=
   CatType functor nat_trans functor_catMixin@{}.
+
+Lemma nat_trans_idE@{} (F : functor) X : cat_id F X = 1.
+Proof. by []. Qed.
+
+Lemma nat_trans_compE@{} F G H (η : nat_trans G H) (ε : nat_trans F G) X :
+  (η ∘ ε) X = η X ∘ ε X.
+Proof. by []. Qed.
+
+Lemma has_inverse_nat_trans@{} F G (η : nat_trans F G) (X : C) :
+  has_inverse η → has_inverse (η X).
+Proof.
+move=> ηP; exists (inverse ηP X).
+by rewrite -2!nat_trans_compE inverseK inverseKV.
+Qed.
+
+Lemma nat_trans_has_inverse@{} F G (η : nat_trans F G) :
+  (∀ X, has_inverse (η X)) → has_inverse η.
+Proof.
+move=> ηP; pose ε X := inverse (ηP X).
+have εP: ∀ X Y f, fmap F f ∘ ε X = ε Y ∘ fmap G f.
+  move=> X Y f; rewrite -[fmap F f]comp1f -(inverseK (ηP Y)).
+  by rewrite -[_ ∘ fmap F f]compA -nat_transP -!compA inverseKV compf1.
+by exists (NatTrans (Sub _ ε εP)); split; apply/eq_nat_trans=> X;
+rewrite nat_trans_compE /= ?inverseK ?inverseKV.
+Qed.
 
 End Functor.
 
@@ -322,7 +375,7 @@ Definition const_functor@{} (X : D) : functor C D :=
 
 Program Definition const_functor_fmap@{} (X Y : D) (f : D X Y) :
   nat_trans (const_functor X) (const_functor Y) :=
-  NatTrans (Sig _ (λ X : C, f) (λ (A B : C) (g : C A B), comp1f f * (compf1 f)^-1)).
+  NatTrans (Sub _ (λ X : C, f) (λ (A B : C) (g : C A B), comp1f f * (compf1 f)^-1)).
 
 Program Definition const_functor_functor : functor D (Fun C D) :=
   Functor const_functor (@const_functor_fmap) _ _.
@@ -357,10 +410,20 @@ by split; move=> *; apply/eq_functor=> * /=; rewrite comp1f compf1.
 Qed.
 
 Definition cat_catMixin@{v} := CatMixin functor_compP@{v}.
-Canonical cat_catType@{v} :=
+Canonical Cat@{v} :=
   Eval hnf in CatType catType functor cat_catMixin@{v}.
 
 End CatCat.
+
+Section ObjFunctor.
+
+Universe u v.
+Constraint u < v.
+
+Definition obj_functor@{} : functor Cat@{u v} Sets@{u v} :=
+  Functor (λ C, Cat.obj C) (λ C D F, fobj F) (λ C, erefl) (λ C D E F G, erefl).
+
+End ObjFunctor.
 
 Section Yoneda.
 
@@ -388,33 +451,30 @@ Definition yoneda@{} X :=
 Definition yoneda_in@{} X (F : functor C^op Sets) (η : nat_trans (yoneda X) F) : F X :=
   η X 1.
 
-Definition yoneda_out_def@{} (X : C) (F : functor C^op Sets) (x : F X) :
-  ∀ Y, Sets (yoneda X Y) (F Y) :=
-  λ (Y : C^op) (f : yoneda X Y), fmap F f x.
-Arguments yoneda_out_def {X F} x Y f.
+Local Notation out X F x :=
+  ((λ (Y : C^op) (f : yoneda X Y), fmap F f x) :
+   ∀ Y, Sets (yoneda X Y) (F Y)).
 
-Lemma yoneda_out_defP@{} (X : C) (F : functor C^op Sets) (x : F X)
+Lemma yoneda_out_subproof@{} (X : C) (F : functor C^op Sets) (x : F X)
   (Y Z : C^op) (f : C^op Y Z) :
-  fmap F f ∘ yoneda_out_def x Y = yoneda_out_def x Z ∘ fmap (yoneda X) f.
+  fmap F f ∘ out X F x Y = out X F x Z ∘ fmap (yoneda X) f.
 Proof.
 apply/funE => g /=.
 by rewrite -[LHS]/((fmap F f ∘ fmap F g) x) -fmapD.
 Qed.
 
 Definition yoneda_out@{} (X : C) (F : functor C^op Sets@{u v}) (x : F X) : nat_trans (yoneda X) F :=
-  NatTrans (Sig _ (yoneda_out_def x) (yoneda_out_defP x)).
+  NatTrans (Sub _ (out X F x) (yoneda_out_subproof x)).
 
 Lemma yoneda_inK@{} X (F : functor C^op Sets) (η : nat_trans (yoneda X) F) : yoneda_out (yoneda_in η) = η.
 Proof.
 apply/eq_nat_trans=> Y; apply/funE=> f; case: η=> η.
-rewrite /yoneda_out /yoneda_out_def /yoneda_in /=.
+rewrite /yoneda_out /yoneda_in /=.
 by rewrite -[LHS]SetsE /= (valP η) SetsE /= -[f in RHS]comp1f.
 Qed.
 
 Lemma yoneda_outK@{} X (F : functor C^op Sets) (x : F X) : yoneda_in (yoneda_out x) = x.
-Proof.
-by rewrite /yoneda_out /yoneda_out_def /yoneda_in /= fmap1.
-Qed.
+Proof. by rewrite /yoneda_out /yoneda_in /= fmap1. Qed.
 
 End Yoneda.
 
@@ -423,13 +483,33 @@ Section Representable.
 Universes u v.
 Constraint u < v.
 
-Context (C : catType@{u}) (X : C) (F : functor C^op Sets).
+Context (C : catType@{u}) (F : functor C^op Sets).
 
-Definition represent@{} : Type@{u} :=
+Definition represent@{} (X : C) : Type@{u} :=
   {x : F X | has_inverse (yoneda_out@{u v} x)}.
 
-Definition mediating@{} (ρ : represent) (Y : C) (y : F Y) : C Y X :=
+Definition mediating@{} X (ρ : represent X) (Y : C) (y : F Y) : C Y X :=
   inverse (valP ρ) Y y.
+
+Definition proj@{} X (ρ : represent X) (Y : C) (f : C Y X) : F Y :=
+  yoneda_out@{u v} (val ρ) Y f.
+
+Lemma projK@{} X (ρ : represent X) (Y : C) (f : C Y X) :
+  mediating ρ (proj ρ f) = f.
+Proof.
+rewrite -[RHS]/(cat_id (yoneda X) Y f).
+by rewrite -[1 in RHS](inverseK (valP ρ)).
+Qed.
+
+Lemma mediatingK X (ρ : represent X) (Y : C) (y : F Y) :
+  proj ρ (mediating ρ y) = y.
+Proof.
+rewrite -[RHS]/(cat_id F Y y).
+by rewrite -[1 in RHS](inverseKV (valP ρ)).
+Qed.
+
+Lemma proj1 X (ρ : represent X) : proj ρ 1 = val ρ.
+Proof. by rewrite /proj /yoneda_out /= fmap1. Qed.
 
 End Representable.
 
@@ -444,17 +524,113 @@ Context (I C : catType@{u}) (X : functor I C).
 universe level *)
 
 Definition cone@{} : functor C^op Sets@{u v} :=
-  functor_comp (yoneda@{u v} X) (op_functor@{u} (const_functor_functor@{u} I C)).
+  functor_comp (yoneda@{u v} X)
+               (op_functor@{u} (const_functor_functor@{u} I C)).
 
-Definition is_limit@{} (L : C) : Type@{u} := represent L cone.
+Program Definition Cone@{} Y (p : ∀ i, C Y (X i))
+  (pP : ∀ i j ij, fmap X ij ∘ p i = p j) : cone Y := NatTrans (Sub _ p _).
 
-Definition proj@{} L (l : is_limit L) (i : I) : C L (X i) :=
-  val l i.
+Next Obligation. by move=> Y p pP /= i j ij; rewrite pP compf1. Qed.
 
-Lemma proj_fmap L (l : is_limit L) (i j : I) (f : I i j) :
-  fmap X f ∘ proj l i = proj l j.
+Lemma coneP@{} Y (c : cone Y) i j ij : fmap X ij ∘ c i = c j.
+Proof. by rewrite /= (nat_transP c) compf1. Qed.
+
+Definition is_limit@{} (L : C) : Type@{u} := represent cone L.
+
+Definition lim_proj@{} L (l : is_limit L) (i : I) : C L (X i) :=
+  proj l 1 i.
+
+Lemma lim_proj_fmap@{} L (l : is_limit L) (i j : I) (ij : I i j) :
+  fmap X ij ∘ lim_proj l i = lim_proj l j.
+Proof. by rewrite /lim_proj proj1 (nat_transP (val l)) /= compf1. Qed.
+
+Lemma is_limitP@{} L (c : cone L) :
+  (∀ (Y : C) (d : cone Y), exists! f : C Y L, ∀ i, c i ∘ f = d i) →
+  is_limit L.
 Proof.
-by rewrite /proj; case: (val l)=> η /=; rewrite (valP η) /= compf1.
+move=> LP; exists c.
+apply/nat_trans_has_inverse=> Y; apply/Sets_has_inverse=> d.
+case/(_ Y d): LP=> f [fP f_unique].
+exists f; split; first by apply/eq_nat_trans.
+by move=> g gP; apply: f_unique=> i; rewrite -gP.
 Qed.
 
 End Limits.
+
+Arguments is_limitP {I C X L} c cP.
+
+Section LimitSets.
+
+Universes u v.
+Constraint u < v.
+
+Context (I : catType@{u}) (X : functor@{v} I Sets@{u v}).
+
+Record lim_sets@{} : Type@{u} := LimSets {
+  of_lim_sets :
+    {L : ∀ i, X i | ∀ i j ij, fmap@{v} X ij (L i) = L j}
+}.
+Coercion of_lim_sets : lim_sets >-> sub.
+
+Universe w.
+Constraint v < w.
+
+Program Definition lim_sets_cone@{} : cone@{v w} X lim_sets :=
+  @Cone@{v w} _ _ X _ (λ (i : I) (x : lim_sets), val x i) _.
+
+Next Obligation.
+by move=> /= i j ij; apply/funE=> x; rewrite /= !SetsE (valP x).
+Qed.
+
+Lemma lim_sets_coneP@{} :
+  (∀ (Y : Sets) (d : cone@{v w} X Y),
+   exists! f : Sets Y lim_sets, ∀ i, lim_sets_cone i ∘ f = d i).
+Proof.
+move=> Y d.
+have dP: ∀ y i j ij, fmap@{v} X ij (d i y) = d j y.
+  by move=> y i j ij; rewrite -[LHS]SetsE coneP.
+exists (λ y, LimSets (Sub _ (λ i, d i y) (dP y))); split=> [i|].
+  by apply/funE=> /= y.
+move=> f ηE; apply/funE=> y /=.
+rewrite (_ : Sub _ _ _ = of_lim_sets (f y)); first by case: (f y).
+by apply/val_inj/dfunE=> i /=; rewrite -ηE.
+Qed.
+
+Definition lim_setsP@{} : is_limit X lim_sets :=
+  is_limitP lim_sets_cone lim_sets_coneP.
+
+End LimitSets.
+
+Section LimitCat.
+
+Universes u v w.
+Constraint u < v.
+Constraint v < w.
+
+Context (I : catType@{u}) (C : functor@{v} I Cat@{u v}).
+
+Open Scope cast_scope.
+
+Let lim_cat_obj : Type@{u} := lim_sets (obj_functor ∘ C : Cat@{v w} _ _).
+
+Record lim_cat_hom@{} (X Y : lim_cat_obj) : Type@{u} := LimCatHom {
+  of_lim_cat_hom :
+    {f : ∀ i : I, C i (X.(val) i) (Y.(val) i) |
+     ∀ i j ij,
+       fmap@{v} (fmap@{v} C ij) (f i) =
+       iso_of_eq (Y.(valP) i j ij)^-1 ∘ f j ∘ iso_of_eq (X.(valP) i j ij)
+    }
+}.
+Local Coercion of_lim_cat_hom : lim_cat_hom >-> sub.
+
+Program Definition lim_cat_hom_id@{} (X : lim_cat_obj) : lim_cat_hom X X :=
+  LimCatHom (Sub _ (λ i, 1) _).
+
+Next Obligation.
+by move=> /= X i j ij; rewrite fmap1 compf1 iso_of_eqKV.
+Qed.
+
+Program Definition lim_cat_hom_comp@{}
+  (X Y Z : lim_cat_obj)
+  (F : lim_cat_hom Y Z) (G : lim_cat_hom X Y) : lim_cat_hom X Z :=
+  LimCatHom (Sub _

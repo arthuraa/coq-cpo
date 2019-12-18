@@ -87,16 +87,16 @@ Definition pairf@{i} (T S R : Type@{i}) (f : R → T) (g : R → S) x :=
   (f x, g x).
 
 Set Primitive Projections.
-Record sig@{i} (T : Type@{i}) (P : T → Prop) := Sig {
+Record sub@{i} (T : Type@{i}) (P : T → Prop) := Sub {
   val  : T;
   valP : P val;
 }.
 Unset Primitive Projections.
 
-Arguments Sig {T} P val valP.
+Arguments Sub {T} P val valP.
 
-Notation "{ x | P }" := (sig (fun x => P)) : type_scope.
-Notation "{ x : T | P }" := (sig (fun x : T => P)) : type_scope.
+Notation "{ x | P }" := (sub (fun x => P)) : type_scope.
+Notation "{ x : T | P }" := (sub (fun x : T => P)) : type_scope.
 
 Lemma val_inj@{i} (T : Type@{i}) (P : T → Prop) : injective (@val T P).
 Proof.
@@ -105,6 +105,12 @@ by rewrite (PropI _ xP xP').
 Qed.
 
 Axiom uchoice : ∀ T (P : T → Prop), (∃! x, P x) → {x | P x}.
+
+Lemma uchoiceE T (P : T → Prop) (e : ∃!x, P x) x : P x → val (uchoice e) = x.
+Proof.
+case: uchoice=> y yP /= xP.
+by case: e=> z [_ zP]; rewrite -(zP _ yP) -(zP _ xP).
+Qed.
 
 Section Quotient.
 
@@ -128,7 +134,7 @@ Unset Elimination Schemes.
 Record quot : Type@{i} := Quot_ {of_quot : {P : T → Prop | ∃x, P = R x}}.
 Set Elimination Schemes.
 
-Definition Quot (x : T) : quot := Quot_ (Sig _ (R x) (ex_intro _ x erefl)).
+Definition Quot (x : T) : quot := Quot_ (Sub _ (R x) (ex_intro _ x erefl)).
 
 Lemma QuotE x y : R x y -> Quot x = Quot y.
 Proof.
