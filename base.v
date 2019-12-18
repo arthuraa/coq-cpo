@@ -9,6 +9,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 Set Universe Polymorphism.
+Set Primitive Projections.
 
 Notation dfunE := functional_extensionality_dep.
 Notation  funE := functional_extensionality.
@@ -34,7 +35,7 @@ Notation "e ^-1" := (esym e) : cast_scope.
 Definition congr1 T S (f : T -> S) x y (e : x = y) : f x = f y :=
   match e with erefl => erefl end.
 
-Notation "f @@ e" := (congr1 f e) (at level 20) : cast_scope.
+Notation "f @@ e" := (congr1 f e) (at level 25, right associativity) : cast_scope.
 
 Definition congr1V T S (f : T -> S) x y (e : x = y) : (f @@ e)^-1 = f @@ e^-1 :=
   match e with erefl => erefl end.
@@ -42,6 +43,10 @@ Definition congr1V T S (f : T -> S) x y (e : x = y) : (f @@ e)^-1 = f @@ e^-1 :=
 Definition congr1CE (T S : Type) (a : S) x y (e : x = y) :
   (λ _ : T, a) @@ e = erefl :=
   match e with erefl => erefl end.
+
+Definition congr1D T S (f : T → S) x y z (exy : x = y) (eyz : y = z) :
+  f @@ (exy * eyz) = f @@ exy * f @@ eyz :=
+  match eyz with erefl => erefl end.
 
 Definition etransV T (x y z : T) (p : x = y) (q : y = z) : (p * q)^-1 = q^-1 * p^-1 :=
   match p in _ = y return forall q : y = z, (p * q)^-1 = q^-1 * p^-1 with
@@ -64,13 +69,15 @@ Definition castD T S R (p : T = S) (q : S = R) :
   forall a, cast (p * q) a = cast q (cast p a) :=
   match q with erefl => fun a => erefl end.
 
-Notation "∃! x , P" := (exists! x, P) (at level 200).
+Notation "'∃' ! x .. y , p" :=
+  (ex (unique (fun x => .. (ex (unique (fun y => p))) ..)))
+  (at level 200, x binder, right associativity,
+   format "'[' '∃'  !  '/  ' x  ..  y ,  '/  ' p ']'")
+  : type_scope.
 
-Set Primitive Projections.
 Record prod@{i} (T S : Type@{i}) := pair {
   fst : T; snd : S
 }.
-Unset Primitive Projections.
 Notation "T * S" := (prod T S) : type_scope.
 Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
 Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
@@ -86,14 +93,12 @@ Canonical prod_pair.
 Definition pairf@{i} (T S R : Type@{i}) (f : R → T) (g : R → S) x :=
   (f x, g x).
 
-Set Primitive Projections.
 Record sub@{i} (T : Type@{i}) (P : T → Prop) := Sub {
   val  : T;
   valP : P val;
 }.
-Unset Primitive Projections.
 
-Arguments Sub {T} P val valP.
+Arguments Sub {T P} val valP.
 
 Notation "{ x | P }" := (sub (fun x => P)) : type_scope.
 Notation "{ x : T | P }" := (sub (fun x : T => P)) : type_scope.
@@ -103,6 +108,10 @@ Proof.
 case=> [x xP] [y yP] /= exy; case: y / exy yP => xP'.
 by rewrite (PropI _ xP xP').
 Qed.
+
+Notation "{ 'lift' x 'to' S }" :=
+  ((λ (P : _ → Prop) (f : S → {y | P y}), P x) _ id)
+  (at level 0) : type_scope.
 
 Axiom uchoice : ∀ T (P : T → Prop), (∃! x, P x) → {x | P x}.
 
@@ -134,7 +143,7 @@ Unset Elimination Schemes.
 Record quot : Type@{i} := Quot_ {of_quot : {P : T → Prop | ∃x, P = R x}}.
 Set Elimination Schemes.
 
-Definition Quot (x : T) : quot := Quot_ (Sub _ (R x) (ex_intro _ x erefl)).
+Definition Quot (x : T) : quot := Quot_ (Sub (R x) (ex_intro _ x erefl)).
 
 Lemma QuotE x y : R x y -> Quot x = Quot y.
 Proof.
@@ -188,3 +197,26 @@ Proof. by rewrite /quot_rec quot_rectE. Qed.
 End Rec.
 
 End Quotient.
+
+Section Sigma.
+
+Universe u.
+
+Context (T : Type@{u}) (S : T → Type@{u}).
+
+Record sig : Type := Sig { sig1 : T; sig2 : S sig1 }.
+
+Lemma sig_inj x (y1 y2 : S x) : Sig y1 = Sig y2 → y1 = y2.
+Proof.
+move=> e.
+have ->: y1 = cast (S @@ (sig1 @@ e^-1)) y2.
+  by rewrite -[y2]/(Sig y2).(sig2); case: _ / e.
+by rewrite (PropI _ (sig1 @@ e^-1) erefl).
+Qed.
+
+End Sigma.
+
+Arguments Sig {T S} _ _.
+
+Notation "{ x & P }" := (sig (fun x => P)) : type_scope.
+Notation "{ x : T & P }" := (sig (fun x : T => P)) : type_scope.

@@ -275,6 +275,10 @@ Qed.
 
 Implicit Types F G H : functor.
 
+Lemma fmap_iso_of_eq F X Y (e : X = Y) :
+  fmap F (iso_of_eq e) = iso_of_eq (F @@ e).
+Proof. by case: Y / e=> /=; rewrite fmap1. Qed.
+
 Record nat_trans@{} F G : Type@{u} := NatTrans {
   of_nat_trans :
     {η : ∀ X, D (F X) (G X) |
@@ -425,6 +429,47 @@ Definition obj_functor@{} : functor Cat@{u v} Sets@{u v} :=
 
 End ObjFunctor.
 
+Section Discrete.
+
+Universes u.
+
+Variable T : Type@{u}.
+
+Set Primitive Projections.
+Record disc : Type@{u} := Disc {
+  of_disc : T;
+}.
+Unset Primitive Projections.
+
+Definition disc_hom (x y : disc) := x = y.
+Definition disc_id (x : disc) : disc_hom x x := erefl.
+Definition disc_comp (x y z : disc)
+                     (f : disc_hom y z) (g : disc_hom x y) : disc_hom x z :=
+  etrans g f.
+
+Lemma disc_compP : Cat.axioms@{u} disc_comp disc_id.
+Proof.
+split=> //.
+- by move=> X Y f; case: Y / f.
+- by move=> A B C D h g f; case: D / h.
+Qed.
+
+Definition disc_catMixin := CatMixin@{u} disc_compP.
+Canonical disc_catType : catType@{u} :=
+  Eval hnf in CatType disc disc_hom disc_catMixin.
+
+Open Scope cast_scope.
+
+Program Definition disc_lift (C : catType@{u}) (f : T → C) :
+  functor@{u} disc_catType C :=
+  Functor (λ x, f x.(of_disc)) (λ x y exy, iso_of_eq (_ @@ exy)) (λ x, erefl) _.
+
+Next Obligation.
+by move=> C f x y z eyx exy; rewrite /= congr1D iso_of_eqD.
+Qed.
+
+End Discrete.
+
 Section Yoneda.
 
 Universe u v.
@@ -544,20 +589,72 @@ Lemma lim_proj_fmap@{} L (l : is_limit L) (i j : I) (ij : I i j) :
   fmap X ij ∘ lim_proj l i = lim_proj l j.
 Proof. by rewrite /lim_proj proj1 (nat_transP (val l)) /= compf1. Qed.
 
-Lemma is_limitP@{} L (c : cone L) :
-  (∀ (Y : C) (d : cone Y), exists! f : C Y L, ∀ i, c i ∘ f = d i) →
-  is_limit L.
+Lemma lim_projP@{} L (l : is_limit L) Y (d : cone Y) i :
+  lim_proj l i ∘ mediating l d = d i.
 Proof.
-move=> LP; exists c.
-apply/nat_trans_has_inverse=> Y; apply/Sets_has_inverse=> d.
+by rewrite /lim_proj proj1 -[d in RHS](mediatingK l).
+Qed.
+
+Lemma Limit_subproof@{} L (c : cone L) :
+  (∀ (Y : C) (d : cone Y), ∃! f : C Y L, ∀ i, c i ∘ f = d i) →
+  has_inverse (yoneda_out c).
+Proof.
+move=> LP; apply/nat_trans_has_inverse=> Y; apply/Sets_has_inverse=> d.
 case/(_ Y d): LP=> f [fP f_unique].
 exists f; split; first by apply/eq_nat_trans.
 by move=> g gP; apply: f_unique=> i; rewrite -gP.
 Qed.
 
+Definition Limit@{} L c cP : is_limit L :=
+  Sub _ c (@Limit_subproof L c cP).
+
 End Limits.
 
-Arguments is_limitP {I C X L} c cP.
+Arguments Cone {I C X Y} p pP.
+Arguments Limit {I C X L} c cP.
+
+Section TransportCone.
+
+Universes u v.
+Constraint u < v.
+
+Context (I C D : catType@{u}) (X : functor I C) (F : functor C D).
+
+Program Definition cone_app@{} Y (c : cone@{u v} X Y) :
+  cone@{u v} (functor_comp F X) (F Y) :=
+  @Cone I D (functor_comp F X) (F Y) (λ i, fmap F (c i)) _.
+
+Next Obligation.
+by move=> Y c i j ij /=; rewrite -fmapD (coneP c).
+Qed.
+
+End TransportCone.
+
+Section Products.
+
+Universes u v.
+Constraint u < v.
+
+Context (I : Type@{u}) (C : catType@{u}) (X : I → C).
+
+Definition is_prod@{} (L : C) : Type@{u} :=
+  represent (cone@{u v} (disc_lift X)) L.
+
+Definition ProdCone Y (d : ∀ i, C Y (X i)) : cone@{u v} (disc_lift@{u} X) Y :=
+  @Cone@{u v} _ _ (disc_lift@{u} X) _ (λ i' : disc I, d i'.(of_disc))
+    (λ i j ij, match ij with erefl => comp1f (d i.(of_disc)) end).
+
+Lemma Prod_subproof@{} L (c : ∀ i, C L (X i)) :
+  (∀ (Y : C) (d : ∀ i, C Y (X i)), ∃! f : C Y L, ∀ i, c i ∘ f = d i) →
+  has_inverse (yoneda_out (ProdCone c)).
+Proof.
+move=> cP; apply: Limit_subproof => Y d.
+case: (cP Y (λ i, d (Disc i)))=> f [fP f_unique].
+exists f; split => [[i]|g gP]; first exact: fP.
+apply: f_unique=> i; exact: (gP (Disc i)).
+Qed.
+
+End Products.
 
 Section LimitSets.
 
@@ -566,11 +663,18 @@ Constraint u < v.
 
 Context (I : catType@{u}) (X : functor@{v} I Sets@{u v}).
 
+Set Primitive Projections.
 Record lim_sets@{} : Type@{u} := LimSets {
   of_lim_sets :
     {L : ∀ i, X i | ∀ i j ij, fmap@{v} X ij (L i) = L j}
 }.
+Unset Primitive Projections.
 Coercion of_lim_sets : lim_sets >-> sub.
+
+Lemma eq_lim_sets@{} (x y : lim_sets) : (∀ i, val x i = val y i) → x = y.
+Proof.
+by move=> exy; congr LimSets; apply/val_inj/dfunE.
+Qed.
 
 Universe w.
 Constraint v < w.
@@ -597,7 +701,7 @@ by apply/val_inj/dfunE=> i /=; rewrite -ηE.
 Qed.
 
 Definition lim_setsP@{} : is_limit X lim_sets :=
-  is_limitP lim_sets_cone lim_sets_coneP.
+  Limit lim_sets_cone lim_sets_coneP.
 
 End LimitSets.
 
@@ -613,6 +717,7 @@ Open Scope cast_scope.
 
 Let lim_cat_obj : Type@{u} := lim_sets (obj_functor ∘ C : Cat@{v w} _ _).
 
+Set Primitive Projections.
 Record lim_cat_hom@{} (X Y : lim_cat_obj) : Type@{u} := LimCatHom {
   of_lim_cat_hom :
     {f : ∀ i : I, C i (X.(val) i) (Y.(val) i) |
@@ -621,16 +726,119 @@ Record lim_cat_hom@{} (X Y : lim_cat_obj) : Type@{u} := LimCatHom {
        iso_of_eq (Y.(valP) i j ij)^-1 ∘ f j ∘ iso_of_eq (X.(valP) i j ij)
     }
 }.
+Unset Primitive Projections.
 Local Coercion of_lim_cat_hom : lim_cat_hom >-> sub.
 
-Program Definition lim_cat_hom_id@{} (X : lim_cat_obj) : lim_cat_hom X X :=
+Lemma eq_lim_cat_hom X Y (f g : lim_cat_hom X Y) :
+  (∀ i, val f i = val g i) → f = g.
+Proof.
+by move=> efg; congr LimCatHom; apply/val_inj/dfunE.
+Qed.
+
+Program Definition lim_cat_id@{} (X : lim_cat_obj) : lim_cat_hom X X :=
   LimCatHom (Sub _ (λ i, 1) _).
 
 Next Obligation.
 by move=> /= X i j ij; rewrite fmap1 compf1 iso_of_eqKV.
 Qed.
 
-Program Definition lim_cat_hom_comp@{}
+Program Definition lim_cat_comp@{}
   (X Y Z : lim_cat_obj)
   (F : lim_cat_hom Y Z) (G : lim_cat_hom X Y) : lim_cat_hom X Z :=
-  LimCatHom (Sub _
+  LimCatHom (Sub _ (λ i, F.(val) i ∘ G.(val) i) _).
+
+Next Obligation.
+move=> X Y Z F G i j ij.
+rewrite fmapD F.(valP) G.(valP) !compA.
+by rewrite -[_ ∘ iso_of_eq (valP Y i j ij) ∘ _]compA iso_of_eqK compf1.
+Qed.
+
+Lemma lim_cat_compP@{} : Cat.axioms@{u} lim_cat_comp lim_cat_id.
+Proof.
+split.
+- move=> X Y [f]; congr LimCatHom; apply/val_inj/dfunE=> i.
+  by rewrite /= comp1f.
+- move=> X Y [f]; congr LimCatHom; apply/val_inj/dfunE=> i.
+  by rewrite /= compf1.
+- move=> X Y Z W [h] [g] [f]; congr LimCatHom.
+  by apply/val_inj/dfunE=> i; rewrite /= compA.
+Qed.
+
+Definition lim_cat_catMixin := CatMixin@{u} lim_cat_compP.
+Canonical lim_cat := CatType lim_cat_obj lim_cat_hom lim_cat_catMixin.
+
+Definition lim_cat_cone_proj@{} (i : I) : Cat@{v w} lim_cat (C i) :=
+  Functor (λ X : lim_cat_obj, val X i) (λ X Y f, val f i)
+          (λ X, erefl) (λ X Y Z f g, erefl).
+
+Lemma lim_cat_coneC@{} i j ij :
+  fmap C ij ∘ lim_cat_cone_proj i = lim_cat_cone_proj j.
+Proof.
+apply/eq_functor.
+- move=> X /=; exact: (valP X).
+- move=> e1 X Y f.
+  rewrite -[fmap (_ ∘ _) f]/(fmap (fmap C ij) (val f i)) (valP f).
+  rewrite -[fmap _ f]/(val f j).
+  rewrite (PropI _ (valP X i j ij) (e1 X)).
+  rewrite (PropI _ (valP Y i j ij) (e1 Y)).
+  by rewrite !compA iso_of_eqK comp1f.
+Qed.
+
+Definition lim_cat_cone@{} : cone@{v w} C lim_cat :=
+  @Cone@{v w} _ _ C lim_cat (@lim_cat_cone_proj) lim_cat_coneC.
+
+Lemma lim_cat_coneP@{} (D : Cat) (d : cone@{v w} C D) :
+  ∃! F : Cat D lim_cat, ∀ i, lim_cat_cone i ∘ F = d i.
+Proof.
+pose limP := lim_setsP (functor_comp obj_functor C).
+pose F0 : D → lim_cat_obj := mediating limP (cone_app _ d).
+have F0P X i : val (F0 X) i = d i X.
+  by rewrite -[LHS]/((lim_proj limP i ∘ F0) X) lim_projP.
+pose F1_def X Y (f : D X Y) i : C i (val (F0 X) i) (val (F0 Y) i) :=
+  iso_of_eq (F0P Y i)^-1 ∘ fmap (d i) f ∘ iso_of_eq (F0P X i).
+have F1_defP X Y f : {lift F1_def X Y f to lim_cat_hom (F0 X) (F0 Y)}.
+  move=> i j ij; rewrite /F1_def !fmapD; move: (coneP d ij) => e.
+  set g := fmap (fmap C ij) (fmap (d i) f).
+  have ->: fmap (d j) f = iso_of_eq ((λ F, fobj F Y) @@ e) ∘ g ∘ iso_of_eq ((λ F, fobj F X) @@ e^-1).
+    by rewrite /g; case: (d j) / e; rewrite /= compf1 comp1f.
+  rewrite !compA -iso_of_eqD -![in RHS]compA -iso_of_eqD.
+  rewrite !fmap_iso_of_eq -iso_of_eqD !compA -iso_of_eqD.
+  congr (iso_of_eq _ ∘ g ∘ iso_of_eq _); exact: PropI.
+pose F1 X Y f := LimCatHom (Sub _ (F1_def X Y f) (F1_defP X Y f)).
+have F11 X : F1 X X 1 = 1.
+  congr LimCatHom; apply/val_inj/dfunE=> i.
+  by rewrite /= /F1_def fmap1 compf1 iso_of_eqKV.
+have F1D X Y Z (f : D Y Z) (g : D X Y) : F1 _ _ (f ∘ g) = F1 _ _ f ∘ F1 _ _ g.
+  congr LimCatHom; apply/val_inj/dfunE=> i.
+  rewrite /= /F1_def !compA -[_ ∘ iso_of_eq _ ∘ iso_of_eq _]compA.
+  by rewrite iso_of_eqK compf1 fmapD !compA.
+exists (Functor F0 F1 F11 F1D); split.
+  move=> i; apply/eq_functor=> [X|]; first exact: F0P.
+  move=> F0P' X Y f /=; rewrite /F1_def.
+  rewrite (PropI _ (F0P Y i) (F0P' Y)) !compA iso_of_eqK comp1f.
+  congr comp; congr iso_of_eq; exact: PropI.
+move=> G GP; apply/eq_functor=> [X|] /=.
+  by apply/eq_lim_sets=> i; rewrite F0P -GP.
+move=> eF0G X Y f; apply/eq_lim_cat_hom=> i /=.
+rewrite /F1_def /=. -GP.
+
+
+
+Lemma lim_sets_coneP@{} :
+  (∀ (Y : Sets) (d : cone@{v w} X Y),
+   exists! f : Sets Y lim_sets, ∀ i, lim_sets_cone i ∘ f = d i).
+Proof.
+move=> Y d.
+have dP: ∀ y i j ij, fmap@{v} X ij (d i y) = d j y.
+  by move=> y i j ij; rewrite -[LHS]SetsE coneP.
+exists (λ y, LimSets (Sub _ (λ i, d i y) (dP y))); split=> [i|].
+  by apply/funE=> /= y.
+move=> f ηE; apply/funE=> y /=.
+rewrite (_ : Sub _ _ _ = of_lim_sets (f y)); first by case: (f y).
+by apply/val_inj/dfunE=> i /=; rewrite -ηE.
+Qed.
+
+
+Lemma lim_catP@{} : is_limit@{v w} C lim_cat.
+Proof.
+apply: (is_limitI.
