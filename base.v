@@ -83,6 +83,13 @@ Notation "p .1" := (fst p) (at level 2, left associativity) : pair_scope.
 Notation "p .2" := (snd p) (at level 2, left associativity) : pair_scope.
 Notation "( x , y , .. , z )" := (pair .. (pair x y) .. z) : core_scope.
 
+Declare Scope coq_prod_scope.
+Delimit Scope coq_prod_scope with coq_prod.
+Notation "T * S" := (Datatypes.prod T S) : coq_prod_scope.
+Notation "p .1" := (Datatypes.fst p) (at level 2, left associativity) : coq_prod_scope.
+Notation "p .2" := (Datatypes.snd p) (at level 2, left associativity) : coq_prod_scope.
+Notation "( x , y , .. , z )" := (Datatypes.pair .. (Datatypes.pair x y) .. z) : coq_prod_scope.
+
 Arguments fst {_ _} _.
 Arguments snd {_ _} _.
 (* This declaration helps inferring a pair p when we know what p.1 and p.2
@@ -218,5 +225,6 @@ End Sigma.
 
 Arguments Sig {T S} _ _.
 
-Notation "{ x & P }" := (sig (fun x => P)) : type_scope.
+Notation "{ x & P }"     := (sig (fun x => P)) : type_scope.
 Notation "{ x : T & P }" := (sig (fun x : T => P)) : type_scope.
+Notation "{ ' pat : T & P }" := (sig (fun pat : T => P)) : type_scope.
