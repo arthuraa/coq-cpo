@@ -1,0 +1,5 @@
+*.aux
+*.vo
+*.glob
+CoqMakefile*
+.coqdeps.d
