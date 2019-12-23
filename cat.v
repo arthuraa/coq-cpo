@@ -839,3 +839,39 @@ Definition lim_catP@{} : is_limit C lim_cat :=
   Limit lim_cat_cone lim_cat_coneP.
 
 End LimitCat.
+
+Section Adjunctions.
+
+Universe u.
+
+Context (C D : catType@{u}).
+
+Record adjoint (F : functor C D) (G : functor D C) : Type@{u} := Adjoint {
+  adjLR  : ∀ X Y, D (F X) Y → C X (G Y);
+  adjRL  : ∀ X Y, C X (G Y) → D (F X) Y;
+  adjLRK : ∀ X Y (f : D (F X) Y), adjRL (adjLR f) = f;
+  adjRLK : ∀ X Y (f : C X (G Y)), adjLR (adjRL f) = f;
+  adjLRN : ∀ (X1 X2 : C) (Y1 Y2 : D),
+           ∀ (f : D Y1 Y2) (g : D (F X2) Y1) (h : C X1 X2),
+             adjLR (f ∘ g ∘ fmap F h) = fmap G f ∘ adjLR g ∘ h;
+  adjRLN : ∀ (X1 X2 : C) (Y1 Y2 : D),
+           ∀ (f : D Y1 Y2) (g : C X2 (G Y1)) (h : C X1 X2),
+             adjRL (fmap G f ∘ g ∘ h) = f ∘ adjRL g ∘ fmap F h;
+}.
+
+Lemma eq_adjointLR F G (a1 a2 : adjoint F G) :
+  (∀ X Y (f : D (F X) Y), adjLR a1 f = adjLR a2 f) →
+  a1 = a2.
+Proof.
+case: a1 a2=> [LR1 RL1 p11 p12 p13 p14] [LR2 RL2 p21 p22 p23 p24] /= eLR.
+have {}eLR: LR1 = LR2.
+  by apply/dfunE=> X; apply/dfunE=> Y; apply/funE=> f.
+case: LR2 / eLR p21 p22 p23 p24=> p21 p22 p23 p24.
+suff eRL: RL1 = RL2.
+  case: RL2 / eRL p21 p22 p23 p24=> p21 p22 p23 p24.
+  congr Adjoint; exact: PropI.
+apply/dfunE=> X; apply/dfunE=> Y; apply/funE=> f.
+by rewrite -{2}[f]p12 p21.
+Qed.
+
+End Adjunctions.
