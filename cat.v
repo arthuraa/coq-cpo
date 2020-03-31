@@ -1,4 +1,5 @@
 From mathcomp Require Import ssreflect ssrfun.
+From void Require Import void.
 From cpo Require Import base.
 
 Set Implicit Arguments.
@@ -839,6 +840,47 @@ Definition lim_catP@{} : is_limit C lim_cat :=
   Limit lim_cat_cone lim_cat_coneP.
 
 End LimitCat.
+
+Module CartCat.
+
+Section ClassDef.
+
+Universe u v.
+Constraint u < v.
+
+Record class_of (C : Type@{u}) (hom : C -> C -> Type@{u}) : Type@{u} := Class {
+  base : Cat.mixin_of@{u} hom;
+  term : {T : C & is_limit@{u v} (@disc_lift _ (Cat.Pack base) (of_void C)) T};
+  prod : ∀ F : functor (disc_catType bool) (Cat.Pack base), {P : C & is_limit@{u v} F P};
+}.
+
+Record type := Pack {
+  obj : Type@{u};
+  hom : obj -> obj -> Type@{u};
+  _   : class_of hom
+}.
+Local Coercion obj : type >-> Sortclass.
+Local Coercion base : class_of >-> Cat.mixin_of.
+Variables (C0 : Type@{u}) (C1 : C0 -> C0 -> Type@{u}) (cC : type).
+Definition class := let: Pack _ _ c as cC' := cC return class_of (@hom cC') in c.
+Definition clone c of phant_id class c := @Pack C0 C1 c.
+
+Definition catType := @Cat.Pack _ _ class.
+
+End ClassDef.
+
+Module Exports.
+Coercion obj : type >-> Sortclass.
+Coercion hom : type >-> Funclass.
+Coercion base : class_of >-> Cat.mixin_of.
+Coercion catType : type >-> Cat.type.
+Canonical catType.
+Notation cartCatType := type.
+End Exports.
+
+End CartCat.
+
+Export CartCat.Exports.
 
 Section Adjunctions.
 
