@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect ssrfun ssrnat ssrbool eqtype.
 From void Require Import void.
 From cpo Require Import base.
 
@@ -272,6 +272,11 @@ Record functor@{} : Type@{u} := Functor {
              fmap (f ∘ g) = fmap f ∘ fmap g;
 }.
 
+Definition functor_of of phant (C -> D) := functor.
+Identity Coercion functor_of_functor : functor_of >-> functor.
+Notation "{ 'functor' T }" := (functor_of (Phant T))
+  (at level 0, format "{ 'functor'  T }") : type_scope.
+
 Open Scope cast_scope.
 
 Lemma eq_functor@{} (F G : functor) (eFG : ∀ X, F X = G X) :
@@ -371,6 +376,9 @@ rewrite nat_trans_compE /= ?inverseK ?inverseKV.
 Qed.
 
 End Functor.
+
+Notation "{ 'functor' T }" := (functor_of (Phant T))
+  (at level 0, format "{ 'functor'  T }") : type_scope.
 
 Arguments fmap {_ _} _ {_ _}.
 Arguments Functor {_ _} _ _ _ _.
@@ -485,6 +493,29 @@ by move=> C f x y z eyx exy; rewrite /= congr1D iso_of_eqD.
 Qed.
 
 End Discrete.
+
+Section Indiscrete.
+
+Universe i.
+
+Variable T : Type@{i}.
+
+Definition indisc_obj : Type@{i} := T.
+Definition indisc_hom (_ _ : T) : Set := unit.
+Definition indisc_id (_ : T) := tt.
+Definition indisc_comp (_ _ _ : T) (x y : unit) := tt.
+
+Lemma indisc_compP : Cat.axioms@{i} indisc_comp indisc_id.
+Proof. by rewrite /indisc_comp /indisc_id; split=> // ?? []. Qed.
+
+Definition indisc_catMixin := CatMixin@{i} indisc_compP.
+Canonical indisc_catType : catType@{i} :=
+  Eval hnf in CatType indisc_obj indisc_hom indisc_catMixin.
+
+End Indiscrete.
+
+Canonical unit_catType : catType@{Set} :=
+  CatType unit (@indisc_hom@{Set} unit) (indisc_catMixin@{Set} unit).
 
 Section Yoneda.
 
@@ -917,3 +948,133 @@ by rewrite -{2}[f]p12 p21.
 Qed.
 
 End Adjunctions.
+
+Section NatCat.
+
+(* This could be generalized to any preorder, but we do an adhoc definition
+   for nat to avoid messing with PoType for now. *)
+
+Lemma nat_compP :
+  @Cat.axioms@{Set} nat leq (fun n m p mp nm => leq_trans nm mp) leqnn.
+Proof.
+split.
+- move=> n m nm; exact: eq_irrelevance.
+- move=> n m nm; exact: eq_irrelevance.
+- move=> n m p q pq mp nm; exact: eq_irrelevance.
+Qed.
+
+Definition nat_catMixin := CatMixin nat_compP.
+Canonical nat_catType := Eval hnf in CatType@{Set} nat leq nat_catMixin.
+
+(* Build a functor from nat by giving each morphism.  We make the
+   functor contravariant so that it is more convenient for us when
+   building the inverse limit of CPOs.  *)
+
+Universes i j.
+Constraint i <= j.
+
+Section DownDef.
+
+Variable C : catType@{i}.
+Variable X : nat -> C.
+Variable f : forall n, C (X n.+1) (X n).
+
+Fixpoint down_def n m : C (X (m + n)) (X n) :=
+  match m with
+  | 0    => 1
+  | m.+1 => down_def n m ∘ f (m + n)
+  end.
+
+Lemma down_defSn n m :
+  f n ∘ down_def n.+1 m = down_def n m.+1 ∘ iso_of_eq (congr1 X (addnS _ _)).
+Proof.
+elim: m=> [|m IH] /=; first by rewrite eq_axiomK /= comp1f.
+rewrite compA IH /= -[LHS]compA -[RHS]compA; congr comp.
+move: (addnS m n) (addnS m.+1 n); rewrite -![_.+1 + _]/((_ + _).+1).
+(* FIXME: Why is this rewrite needed? *)
+rewrite -![m.+2 + _]/((_ + _).+2).
+move: (m + n.+1) (m + n).+1=> a b q.
+by case: b / q=> q /=; rewrite !eq_axiomK /= comp1f compf1.
+Qed.
+
+Fact down_key : unit. Proof. exact: tt. Qed.
+
+Definition down n m (nm : n <= m) : C (X m) (X n) :=
+  locked_with
+    down_key
+    (down_def _ _ ∘ (iso_of_eq (congr1 X (esym (subnK nm))))).
+
+Lemma downS n m (nm : n <= m) (nm1 : n <= m.+1) : down nm1 = down nm ∘ f m.
+Proof.
+unfold down; rewrite !unlock.
+move: (subnK nm) (subnK nm1); rewrite (subSn nm) /=.
+move: {nm nm1} (m - n)=> o; rewrite -[o.+1 + n]/(o + n).+1 => e.
+by case: m / e => ?; rewrite eq_axiomK /= !compf1.
+Qed.
+
+Lemma down0 n (nn : n <= n) : down nn = 1.
+Proof.
+unfold down; rewrite unlock; move: (subnK nn); rewrite subnn=> e.
+by rewrite eq_axiomK /= comp1f.
+Qed.
+
+Lemma down1 n (nSn : n <= n.+1) : down nSn = f n.
+Proof. by rewrite (downS (leqnn n) nSn) down0 comp1f. Qed.
+
+Lemma downD n m o (nm : n <= m) (mo : m <= o) :
+  down (leq_trans nm mo) = down nm ∘ down mo.
+Proof.
+move: (mo) (leq_trans _ _); rewrite -(subnK mo) {mo}.
+elim: (o - m)=> {o} [|o IH] /=.
+  move=> mo no; unfold down; rewrite !unlock; move: (subnK mo).
+  rewrite -![0 + m]/(m) subnn => {mo} mo; rewrite eq_axiomK /= compf1.
+  by rewrite (eq_irrelevance no nm) compf1.
+rewrite -![o.+1 + _]/(o + _).+1 => mo no.
+rewrite (downS (leq_trans nm (leq_addl o m)) no).
+rewrite (IH (leq_addl o m) (leq_trans nm (leq_addl o m))).
+by rewrite (downS (leq_addl o m) mo) compA.
+Qed.
+
+Program Definition down_functor : {functor op nat -> C} :=
+  Functor X (fun m n nm => down nm) _ _.
+
+Next Obligation. move=> n /=; exact: down0. Qed.
+Next Obligation. by move=> n m p /= g h; rewrite -downD. Qed.
+
+Lemma down_coneP Y (g : forall n, C Y (X n)) :
+  (forall n, f n ∘ g n.+1 = g n) ->
+  forall n m (nm : n <= m), down nm ∘ g m = g n.
+Proof.
+move=> /= gP n m nm; unfold down; rewrite !unlock.
+move: (m - n) (subnK nm)=> p e; case: m / e {nm}; rewrite compf1.
+elim: p=> [|p IH] /=; first by rewrite comp1f.
+by rewrite -IH -[g (p + n)]gP compA.
+Qed.
+
+Definition nat_cone Y (g : forall n, C Y (X n)) :
+  (forall n, f n ∘ g n.+1 = g n) -> cone down_functor Y :=
+  fun gP => @Cone _ _ down_functor Y g (fun m n nm => down_coneP gP nm).
+
+End DownDef.
+
+Lemma down_comp
+  (C D : catType@{i}) (X : nat -> C) (f : forall n, C (X n.+1) (X n))
+  (G : {functor C -> D}) n m (nm : n <= m) :
+  fmap G (down f nm) = down (fun n => fmap G (f n)) nm.
+Proof.
+move: (nm); rewrite -(subnK nm); elim: (m - n)=> {m nm} [|m IH].
+  by move=> ?; rewrite !down0 fmap1.
+change (m.+1 + n) with (m + n).+1 => nm.
+by rewrite !(downS _ (leq_addl m n)) fmapD IH.
+Qed.
+
+Lemma down_comp_cone
+  (C D : catType@{i}) (X : nat -> C) (f : forall n, C (X n.+1) (X n))
+  Y (g : forall n, C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1)
+  (F : {functor C -> D}) :
+  forall n, fmap F (g n) = fmap F (f n) ∘ fmap F (g n.+1).
+Proof. by move=> n; rewrite -fmapD gP. Qed.
+
+Arguments down_comp_cone {_ _ _} _ {_} _ _ _ _.
+
+End NatCat.

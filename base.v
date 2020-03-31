@@ -11,6 +11,8 @@ Unset Printing Implicit Defensive.
 Set Universe Polymorphism.
 Set Primitive Projections.
 
+Obligation Tactic := idtac.
+
 Notation dfunE := functional_extensionality_dep.
 Notation  funE := functional_extensionality.
 Notation PropE := propositional_extensionality.
@@ -228,3 +230,89 @@ Arguments Sig {T S} _ _.
 Notation "{ x & P }"     := (sig (fun x => P)) : type_scope.
 Notation "{ x : T & P }" := (sig (fun x : T => P)) : type_scope.
 Notation "{ ' pat : T & P }" := (sig (fun pat : T => P)) : type_scope.
+
+Section Singletons.
+
+Variable T : Type.
+
+Variant subsing :=
+  Subsing of {X : T -> Prop | forall x y, X x -> X y -> x = y}.
+
+Definition pred_of_subsing (X : subsing) :=
+  let: Subsing X := X in val X.
+
+Coercion pred_of_subsing : subsing >-> Funclass.
+
+Lemma subsingP (X : subsing) x y : X x -> X y -> x = y.
+Proof. case: X=> [X]; exact: (valP X). Qed.
+
+Lemma eq_subsing (X Y : subsing) :
+  (forall x, X x <-> Y x) <-> X = Y.
+Proof.
+split=> [|-> //]; case: X Y=> [X] [Y] /= e.
+by congr Subsing; apply/val_inj/funE=> x; apply/PropE.
+Qed.
+
+Program Definition subsing_of (x : T) :=
+  Subsing (Sub (eq x) _).
+
+Next Obligation. by move=> /= ??? ->. Qed.
+
+Lemma subsing_of_inj : injective subsing_of.
+Proof. by move=> x y [->]. Qed.
+
+Lemma in_subsing (X : subsing) (x : T) : X x -> X = subsing_of x.
+Proof.
+move=> Xx; apply/eq_subsing=> y; split=> [|<- //].
+exact: (subsingP Xx).
+Qed.
+
+Program Definition subsing0 : subsing :=
+  Subsing (Sub (fun _ : T => False) (fun _ _ (H : False) => match H with end)).
+
+End Singletons.
+
+Arguments Subsing {_} _.
+Arguments subsing0 {_}.
+Arguments subsing_of {_}.
+
+Section SingletonMap.
+
+Variables T S : Type.
+
+Program Definition liftss (f : T -> subsing S) (x : subsing T) :=
+  Subsing (Sub (fun y => exists2 x0, x x0 & f x0 y) _).
+
+Next Obligation.
+move=> f x y1 y2 [x1 x1P1 x1P2] [x2 /(subsingP x1P1) <- x2P2].
+exact: (subsingP x1P2 x2P2).
+Qed.
+
+Definition mapss (f : T -> S) := liftss (subsing_of \o f).
+
+End SingletonMap.
+
+Lemma liftss1 T : @liftss T T subsing_of = id.
+Proof.
+apply/funE=> X.
+apply/eq_subsing=> x; split; first by case=> y Xy <-.
+by move=> ?; exists x.
+Qed.
+
+Lemma liftss_comp T S R (f : S -> subsing R) (g : T -> subsing S) :
+  liftss f \o liftss g = liftss (liftss f \o g).
+Proof.
+apply/funE=> X; apply/eq_subsing=> z; split.
+- by case=> y [x Xx gx] fy; exists x=> //; exists y.
+- by case=> x Xx [y gx fy]; exists y=> //; exists x.
+Qed.
+
+Lemma liftss_comp1 T S (f : T -> subsing S) : liftss f \o subsing_of = f.
+Proof.
+apply/funE=> /= x.
+apply/eq_subsing=> y; split; first by case => _ <-.
+by move=> ?; exists x.
+Qed.
+
+Lemma liftssB T S (f : T -> subsing S) : liftss f subsing0 = subsing0.
+Proof. by apply/eq_subsing=> x; split=> [[? []]|[]]. Qed.
