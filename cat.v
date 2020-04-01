@@ -575,7 +575,7 @@ Section Representable.
 Universes u v.
 Constraint u < v.
 
-Context (C : catType@{u}) (F : functor C^op Sets).
+Context (C : catType@{u}) (F : functor@{v} C^op Sets@{u v}).
 
 Definition represent@{} (X : C) : Type@{u} :=
   {x : F X | has_inverse (yoneda_out@{u v} x)}.
@@ -642,6 +642,16 @@ Proof.
 by rewrite /lim_proj proj1 -[d in RHS](mediatingK l).
 Qed.
 
+Lemma eq_into_limit@{} (L K : C) (k : is_limit K) :
+  ∀ f g : C L K,
+  (∀ i, lim_proj k i ∘ f = lim_proj k i ∘ g) →
+  f = g.
+Proof.
+move=> f g e; rewrite -(projK k f) -(projK k g); congr mediating.
+apply/eq_nat_trans=> i; move/(_ i): e.
+by rewrite /lim_proj /proj /= compf1.
+Qed.
+
 Lemma Limit_subproof@{} L (c : cone L) :
   (∀ (Y : C) (d : cone Y), ∃! f : C Y L, ∀ i, c i ∘ f = d i) →
   has_inverse (yoneda_out c).
@@ -657,6 +667,7 @@ Definition Limit@{} L c cP : is_limit L :=
 
 End Limits.
 
+Arguments eq_into_limit {I C X L K}.
 Arguments Cone {I C X Y} p pP.
 Arguments Limit {I C X L} c cP.
 
@@ -676,6 +687,51 @@ by move=> Y c i j ij /=; rewrite -fmapD (coneP c).
 Qed.
 
 End TransportCone.
+
+Section HasLimits.
+
+Universes u v.
+Constraint u < v.
+
+Variables (I C : catType@{u}).
+
+Definition has_limits@{} :=
+  ∀ X : {functor I -> C}, {L : C & is_limit@{u v} X L}.
+
+Hypothesis lim : has_limits.
+
+Definition lim_functor_fobj@{} :=
+  λ X : {functor I -> C}, sig1 (lim X).
+
+Program Definition lim_functor_fmap@{} (X Y : {functor I -> C}) (η : nat_trans X Y) :=
+  mediating@{u v} (sig2 (lim Y))
+           (Cone@{u v} (λ i : I, η i ∘ lim_proj (sig2 (lim X)) i) _).
+
+Next Obligation.
+move=> /= X Y η i j ij.
+by rewrite compA nat_transP -compA lim_proj_fmap.
+Qed.
+
+Program Definition lim_functor : {functor {functor I -> C} -> C} :=
+  Functor lim_functor_fobj lim_functor_fmap _ _.
+
+Next Obligation.
+move=> /= X.
+apply/(eq_into_limit (sig2 (lim X)))=> i.
+by rewrite lim_projP /= compf1 comp1f.
+Qed.
+
+(* FIXME: The ssreflect patterns [RHS] seem to be introducing universes *)
+Next Obligation.
+rewrite /lim_functor_fmap.
+move=> /= X Y Z η ε.
+apply/(eq_into_limit (sig2 (lim Z)))=> i /=.
+rewrite compA !lim_projP /=.
+rewrite -!(compA (η i)); congr (_ ∘ _).
+by rewrite lim_projP /=.
+Qed.
+
+End HasLimits.
 
 Section Products.
 
