@@ -93,9 +93,12 @@ End DFunOfProd.
 Unset Universe Polymorphism.
 Universe u0.
 Universe u1.
+Universe u2.
 Constraint u0 < u1.
+Constraint u1 < u2.
 Notation Type0 := Type@{u0} (only parsing).
 Notation Type1 := Type@{u1} (only parsing).
+Notation Type2 := Type@{u2} (only parsing).
 
 Module Po.
 
@@ -227,140 +230,90 @@ Lemma iso_mono (T S : poType) (f : T -> S) :
   isotone f -> monotone f.
 Proof. by move=> iso_f x y; rewrite iso_f. Qed.
 
-Definition unit_appr (x y : unit) := True.
+Program Definition forget_mono : {functor poType -> Sets@{u0 u1}} :=
+  Functor@{u1} (λ X, X) (λ X Y f, f) (λ X, erefl) (λ X Y Z f g, erefl).
 
-Lemma unit_apprP : Po.axioms unit_appr.
-Proof. by split=> // [] [] []. Qed.
+Section LimPoType.
 
-Definition unit_poMixin := PoMixin unit_apprP.
+Variable (I : catType@{u0}) (X : functor_of@{u1} (Phant (I -> poType))).
 
-Canonical unit_poType := PoType unit unit_poMixin.
+Definition appr_lim_poset :
+  relation (lim_sets@{u0 u1} (functor_comp@{u1} forget_mono X)) :=
+  λ x y, ∀ i, val x i ⊑ val y i.
 
-Definition mono_bang (T : poType) : {mono T -> unit} :=
-  Mono (Sub (fun _ => tt) (fun _ _ _ => I)).
-
-Program Definition mono_termCatMixin :=
-  @TermCatMixin _ _ unit_poType mono_bang _.
-
-Next Obligation.
-move=> T f; apply/eq_mono=> x; by case: (f x).
-Qed.
-
-Canonical mono_termCatType :=
-  Eval hnf in TermCatType poType mono mono_termCatMixin.
-
-Lemma mono_compE (T S R : poType)
-  (f : {mono S -> R}) (g : {mono T -> S}) (x : T)
-  : (f ∘ g) x = f (g x).
-Proof. by []. Qed.
-
-Lemma monotone_cast T (S : T -> poType) (x y : T) (e : x = y) : monotone (cast S e).
-Proof. by case: y / e. Qed.
-
-Definition mono_cast T (S : T -> poType) (x y : T) (e : x = y) : {mono _ -> _} :=
-  Eval hnf in Sub (cast S e) (monotone_cast e).
-
-Canonical mono_cast.
-
-Lemma mono_cast1 T (S : T -> poType) (x : T) (e : x = x) :
-  mono_cast S e = mono_id.
-Proof.
-rewrite (proof_irrelevance _ e (erefl x)).
-by apply: val_inj.
-Qed.
-
-Lemma monotone_const (T S : poType) (x : S) : monotone (@constfun T S x).
-Proof. by move=> ???; reflexivity. Qed.
-
-Definition mono_const (T S : poType) (x : S) : {mono T -> S} :=
-  Eval hnf in Sub (@constfun T S x) (monotone_const x).
-Canonical mono_const.
-
-Lemma mono_comp_constL (T S R : poType) (x : R) (f : {mono T -> S}) :
-  mono_const _ x ∘ f = mono_const _ x.
-Proof. exact: val_inj. Qed.
-
-Lemma mono_comp_constR (T S R : poType) (f : {mono S -> R}) (x : S) :
-  f ∘ mono_const _ x = mono_const T (f x).
-Proof. exact: val_inj. Qed.
-
-Section SubPoType.
-
-Variables (T : poType) (P : T -> Prop).
-
-Structure subPoType := SubPoType {
-  subPo_sort  :> subType P;
-  subPo_mixin :  Po.mixin_of subPo_sort;
-  _           :  Po.appr subPo_mixin = fun x y => val x ⊑ val y
-}.
-
-Definition subPoType_poType (sT : subPoType) :=
-  PoType sT (subPo_mixin sT).
-
-Canonical subPoType_poType.
-
-Definition pack_subPoType U :=
-  fun sT cT & sub_sort sT * Po.sort cT -> U * U =>
-  fun m     & phant_id m (Po.class cT) => @SubPoType sT m.
-
-Lemma appr_val (sT : subPoType) (x y : sT) : x ⊑ y = val x ⊑ val y.
-Proof. by rewrite /appr; case: sT x y=> ? ? /= ->. Qed.
-
-Lemma monotone_val (sT : subPoType) : monotone (@val _ _ sT).
-Proof. by move=> x y; rewrite appr_val. Qed.
-
-Definition mono_val' (sT : subPoType) : {mono sT -> T} :=
-  Eval hnf in Sub val (@monotone_val sT).
-
-Canonical mono_val'.
-
-Variable sT : subType P.
-
-Lemma sub_apprP : Po.axioms (fun x y : sT => val x ⊑ val y).
+Lemma appr_lim_posetP : Po.axioms appr_lim_poset.
 Proof.
 split.
-- by move=> ?; reflexivity.
-- by move=> ???; apply: transitivity.
-- by move=> x y xy yx; apply: val_inj; apply: appr_anti.
+- move=> x i; exact: appr_refl.
+- move=> x y z xy yz i; exact: appr_trans (yz i).
+- move=> x y xy yz.
+  by apply/eq_lim_sets=> i; apply/appr_anti; auto.
 Qed.
 
-Definition SubPoMixin := PoMixin sub_apprP.
+Definition lim_poset_poMixin := PoMixin appr_lim_posetP.
+Canonical lim_poset_poType :=
+  Eval hnf in PoType _ lim_poset_poMixin.
 
-End SubPoType.
+Program Definition lim_poset_cone@{} : cone@{u1 u2} X lim_poset_poType :=
+  Cone@{u1 u2} (λ i, Mono (Sub (λ x : lim_poset_poType, val x i) _)) _.
 
-Arguments monotone_val {_ _ _}.
-Arguments mono_val' {_ _ _}.
+Next Obligation.
+move=> /= i x y; exact.
+Qed.
 
-Coercion subPoType_poType : subPoType >-> poType.
+Next Obligation.
+move=> /= i j ij.
+apply/eq_mono=> x /=.
+by rewrite -(valP x _ _ ij).
+Qed.
 
-Notation "[ 'poMixin' 'of' T 'by' <: ]" :=
-  (SubPoMixin _ : Po.mixin_of T)
-  (at level 0, format "[ 'poMixin'  'of'  T  'by'  <: ]") : form_scope.
-
-Notation "[ 'subPoType' 'of' T ]" :=
-  (@pack_subPoType _ _ T _ _ id _ id erefl)
-  (at level 0, format "[ 'subPoType'  'of'  T ]") : form_scope.
-
-Section CanPo.
-
-Variables (T : Type) (S : poType).
-Variables (f : T -> S) (g : S -> T).
-Hypothesis fK : cancel f g.
-
-Definition can_appr (x y : T) := f x ⊑ f y.
-
-Lemma can_apprP : Po.axioms can_appr.
+Lemma lim_poset_coneP@{} :
+  (∀ (Y : poType) (d : cone@{u1 u2} X Y),
+   exists! f : mono Y lim_poset_poType, ∀ i, lim_poset_cone i ∘ f = d i).
 Proof.
-rewrite /can_appr; split.
+move=> Y d.
+pose Ud := cone_app@{u1 u2} forget_mono d.
+pose f : Y → lim_sets (functor_comp forget_mono X) :=
+  mediating (lim_setsP (functor_comp forget_mono X)) Ud.
+have fP : monotone f.
+  move=> y1 y2 y12 i; rewrite 2!lim_setsE /=.
+  exact: (monoP (d i)).
+exists (Mono (Sub f fP)).
+split=> [i|].
+  by apply/eq_mono=> /= y /=; rewrite lim_setsE.
+move=> g gP; apply/eq_mono=> y /=.
+apply/eq_lim_sets=> i.
+by rewrite lim_setsE /= -gP.
+Qed.
+
+Definition lim_posetP : is_limit X lim_poset_poType :=
+  Limit _ lim_poset_coneP.
+
+End LimPoType.
+
+Section InjPo.
+
+Variables (T : Type0) (S : poType).
+Variables (f : T -> S).
+Hypothesis f_inj : injective f.
+
+Definition inj_appr (x y : T) := f x ⊑ f y.
+
+Lemma inj_apprP : Po.axioms inj_appr.
+Proof.
+rewrite /inj_appr; split.
 - move=> x; reflexivity.
 - move=> x y z; exact: transitivity.
-- move=> x y xy yx; apply: (can_inj fK).
+- move=> x y xy yx; apply: f_inj.
   exact: appr_anti xy yx.
 Qed.
 
-Definition CanPoMixin := PoMixin can_apprP.
+Definition InjPoMixin := PoMixin inj_apprP.
 
-End CanPo.
+End InjPo.
+
+Definition CanPoMixin (T : Type0) (S : poType) (f : T -> S) g (fK : cancel f g) :=
+  InjPoMixin (can_inj fK).
 
 Module Ppo.
 
@@ -425,27 +378,6 @@ End PpoTheory.
 
 Arguments bot {_}.
 Notation "⊥" := bot : cpo_scope.
-
-Definition unit_ppoMixin := @PpoMixin _ tt (fun _ => I).
-Canonical unit_ppoType := Eval hnf in PpoType unit unit_ppoMixin.
-
-Section DFunPo.
-
-Variables (I : Type) (T_ : I -> poType).
-
-Definition fun_appr (f g : forall i, T_ i) := forall i, f i ⊑ g i.
-
-Lemma fun_apprP : Po.axioms fun_appr.
-Proof.
-split.
-- by move=> f i; reflexivity.
-- by move=> f g h fg gh i; move: (fg i) (gh i); apply: transitivity.
-- move=> f g fg gf; apply: functional_extensionality_dep=> i.
-  apply: appr_anti; [exact: fg|exact: gf].
-Qed.
-
-Definition dfun_poMixin := PoMixin fun_apprP.
-Canonical dfun_poType := Eval hnf in PoType (dfun T_) dfun_poMixin.
 
 End DFunPo.
 

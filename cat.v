@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssrfun ssrnat ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrnat ssrbool eqtype fintype.
 From void Require Import void.
 From cpo Require Import base.
 
@@ -806,6 +806,10 @@ Qed.
 Definition lim_setsP@{} : is_limit X lim_sets :=
   Limit lim_sets_cone lim_sets_coneP.
 
+Lemma lim_setsE@{} (Y : Sets) (d : cone@{v w} X Y) (y : Y) (i : I) :
+  val (mediating lim_setsP d y) i = d i y.
+Proof. by rewrite -{2}(mediatingK lim_setsP d). Qed.
+
 End LimitSets.
 
 Section LimitCat.
@@ -935,10 +939,9 @@ Section ClassDef.
 Universe u v.
 Constraint u < v.
 
-Record class_of (C : Type@{u}) (hom : C -> C -> Type@{u}) : Type@{u} := Class {
+Record class_of@{} (C : Type@{u}) (hom : C -> C -> Type@{u}) : Type@{u} := Class {
   base : Cat.mixin_of@{u} hom;
-  term : {T : C & is_limit@{u v} (@disc_lift _ (Cat.Pack base) (of_void C)) T};
-  prod : ∀ F : functor (disc_catType bool) (Cat.Pack base), {P : C & is_limit@{u v} F P};
+  prod : ∀ n, has_limits@{u v} (disc_catType@{u} 'I_n) (Cat.Pack base);
 }.
 
 Record type := Pack {
